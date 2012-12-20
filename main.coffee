@@ -174,8 +174,8 @@ class Game
     @cursor = new Cursor 0, 0
     @cursor.moveToPiece m
     @team = [m, m1]
-    @nextToMove = 0
-    @selected = @team[@nextToMove]
+    @selectedIndex = 0
+    @selected = @team[@selectedIndex]
     @selected.select()
 
   receiveInput: (event) ->
@@ -185,11 +185,12 @@ class Game
     @selected.moveBy delta
     @selectNext()
 
+  nextSelectedIndex: -> (@selectedIndex + 1) % @team.length
+
   selectNext: ->
     @selected.deselect()
-    @nextToMove++
-    @nextToMove %= @team.length
-    @selected = @team[@nextToMove]
+    @selectedIndex = @nextSelectedIndex()
+    @selected = @team[@selectedIndex]
     @selected.select()
     @cursor.moveToPiece @selected
 
