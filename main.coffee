@@ -9,8 +9,9 @@ VKEY_RIGHT = 39
 VKEY_DOWN = 40
 
 # z-index
-PIECE = 0
-CURSOR = 1
+RADIUS = 0
+PIECE = 1
+CURSOR = 2
 
 c = document.createElement 'canvas'
 c.width = WIDTH
@@ -131,10 +132,31 @@ class Cursor extends Entity
 
   moveToPiece: (@targetPiece) ->
 
+class CostMap
+  costAt: (x, y) -> 1
+
+class Radius extends Entity
+  constructor: (@tx, @ty, @radius) ->
+    super
+    @zIndex = RADIUS
+
+  draw: (ctx) ->
+    ctx.fillStyle = 'grey'
+    for tx in [@tx-@radius..@tx+@radius]
+      for ty in [@ty-@radius..@ty+@radius]
+        @fillTileAt tx, ty if @distanceTo(tx, ty) <= @radius
+
+  distanceTo: (tx, ty) ->
+    Math.abs(@tx - tx) + Math.abs(@ty - ty)
+
+  fillTileAt: (tx, ty) ->
+    ctx.fillRect tx * TILE_WIDTH, ty * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT
+
 class Game
   constructor: ->
     m = new GamePiece 0, 0, 'red'
     m1 = new GamePiece 1, 1, 'green'
+    @radius = new Radius 0, 0, 3
     @cursor = new Cursor 0, 0
     @cursor.moveToPiece m
     @team = [m, m1]
@@ -173,6 +195,7 @@ document.addEventListener 'keydown', (e) ->
 gameLoop = ->
   clear()
   e.tick() for e in es.entities
+  e.draw ctx for e in es.entities when e.zIndex == RADIUS
   e.draw ctx for e in es.entities when e.zIndex == PIECE
   e.draw ctx for e in es.entities when e.zIndex == CURSOR
 
