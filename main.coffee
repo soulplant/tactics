@@ -7,6 +7,7 @@ VKEY_LEFT = 37
 VKEY_UP = 38
 VKEY_RIGHT = 39
 VKEY_DOWN = 40
+VKEY_ENTER = 13
 
 # z-index
 RADIUS = 0
@@ -196,6 +197,32 @@ class Radius extends Entity
   fillTileAt: (tx, ty) ->
     ctx.fillRect tx * TILE_WIDTH, ty * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT
 
+class MoveSession
+  constructor: (@cursor, @piece, @cb) ->
+    @radius = new Radius @piece.tx, @piece.ty, MOVEMENT_RANGE
+    @done = false
+
+  handleInput: (event) ->
+    return if @piece.isMoving()
+    if isEventAction(event)
+      @radius.kill()
+      @cb()
+
+    delta = eventToDir event
+    return unless delta
+    @piece.moveBy delta
+
+isEventAction = (event) ->
+  switch event.keyCode
+    when VKEY_ENTER then 'action'
+
+eventToDir = (event) ->
+  switch event.keyCode
+    when VKEY_LEFT then {x:-1, y:0}
+    when VKEY_UP then {x:0, y:-1}
+    when VKEY_RIGHT then {x:1, y:0}
+    when VKEY_DOWN then {x:0, y:1}
+
 class Game
   constructor: ->
     m = new GamePiece 0, 0, 'red'
@@ -209,9 +236,11 @@ class Game
 
   handleInput: (event) ->
     return if @cursor.isMoving() or @selected.isMoving()
-    delta = @eventToDir event
-    return unless delta
-    @selected.moveBy delta, => @selectNext()
+    if !@moveSession
+      @moveSession = new MoveSession @cursor, @selected, =>
+        @moveSession = null
+        @selectNext()
+    @moveSession.handleInput event
 
   nextSelectedIndex: -> (@selectedIndex + 1) % @team.length
 
@@ -221,12 +250,6 @@ class Game
     @selected = @team[@selectedIndex]
     @cursor.moveToPiece @selected
 
-  eventToDir: (event) ->
-    switch event.keyCode
-      when VKEY_LEFT then {x:-1, y:0}
-      when VKEY_UP then {x:0, y:-1}
-      when VKEY_RIGHT then {x:1, y:0}
-      when VKEY_DOWN then {x:0, y:1}
 
 g = new Game
 
