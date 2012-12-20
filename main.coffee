@@ -198,7 +198,7 @@ class Radius extends Entity
     ctx.fillRect tx * TILE_WIDTH, ty * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT
 
 class MoveSession
-  constructor: (@cursor, @piece, @cb) ->
+  constructor: (@piece, @cb) ->
     @radius = new Radius @piece.tx, @piece.ty, MOVEMENT_RANGE
     @done = false
 
@@ -237,7 +237,7 @@ class Game
   handleInput: (event) ->
     return if @cursor.isMoving() or @selected.isMoving()
     if !@moveSession
-      @moveSession = new MoveSession @cursor, @selected, =>
+      @moveSession = new MoveSession @selected, =>
         @moveSession = null
         @selectNext()
     @moveSession.handleInput event
