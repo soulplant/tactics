@@ -199,20 +199,28 @@ class Radius extends Entity
 
 class MoveSession
   constructor: (@piece, @cb) ->
-    @radius = new Radius @piece.tx, @piece.ty, MOVEMENT_RANGE
+    @startTx = @piece.tx
+    @startTy = @piece.ty
+    @radius = new Radius @startTx, @startTy, MOVEMENT_RANGE
     @done = false
 
   handleInput: (event) ->
     return if @piece.isMoving()
-    if isEventAction(event)
+    if isActionEvent(event)
       @radius.kill()
       @cb()
 
     delta = eventToDir event
     return unless delta
+    return unless @canMoveTo delta
     @piece.moveBy delta
 
-isEventAction = (event) ->
+  canMoveTo: (delta) ->
+    x = @piece.tx + delta.x
+    y = @piece.ty + delta.y
+    Math.abs(@startTx - x) + Math.abs(@startTy - y) <= MOVEMENT_RANGE
+
+isActionEvent = (event) ->
   switch event.keyCode
     when VKEY_ENTER then 'action'
 
