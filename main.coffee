@@ -180,7 +180,7 @@ class Game
     @selected = @team[@selectedIndex]
     @selected.select()
 
-  receiveInput: (event) ->
+  handleInput: (event) ->
     return if @cursor.isMoving()
     delta = @eventToDir event
     return unless delta
@@ -205,7 +205,7 @@ class Game
 g = new Game
 
 document.addEventListener 'keydown', (e) ->
-  g.receiveInput e
+  g.handleInput e
 , false
 
 gameLoop = ->
