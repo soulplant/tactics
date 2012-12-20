@@ -136,6 +136,8 @@ class Cursor extends Entity
   tick: ->
     if !@isOverTargetPiece()
       @moveOneStepCloserToPiece()
+      if @isOverTargetPiece()
+        @targetPiece.select()
 
   moveOneStepCloserToPiece: ->
     dx = @x - @targetPiece.x
@@ -191,7 +193,6 @@ class Game
     @selected.deselect()
     @selectedIndex = @nextSelectedIndex()
     @selected = @team[@selectedIndex]
-    @selected.select()
     @cursor.moveToPiece @selected
 
   eventToDir: (event) ->
