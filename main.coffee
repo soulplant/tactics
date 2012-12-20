@@ -203,17 +203,20 @@ class MoveSession
     @startTy = @piece.ty
     @radius = new Radius @startTx, @startTy, MOVEMENT_RANGE
     @done = false
+    @pieceMoving = false
 
-  handleInput: (event) ->
-    return if @piece.isMoving()
-    if isActionEvent(event)
+  handleInput: (controller) ->
+    return if @pieceMoving
+    if controller.action()
       @radius.kill()
       @cb()
 
-    delta = eventToDir event
+    delta = controller.delta()
     return unless delta
     return unless @canMoveTo delta
-    @piece.moveBy delta
+    @pieceMoving = true
+    @piece.moveBy delta, =>
+      @pieceMoving = false
 
   canMoveTo: (delta) ->
     x = @piece.tx + delta.x
@@ -242,13 +245,13 @@ class Game
     @selected = @team[@selectedIndex]
     @selected.select()
 
-  handleInput: (event) ->
+  inputUpdated: (controller) ->
     return if @cursor.isMoving() or @selected.isMoving()
     if !@moveSession
       @moveSession = new MoveSession @selected, =>
         @moveSession = null
         @selectNext()
-    @moveSession.handleInput event
+    @moveSession.handleInput controller
 
   nextSelectedIndex: -> (@selectedIndex + 1) % @team.length
 
@@ -258,16 +261,39 @@ class Game
     @selected = @team[@selectedIndex]
     @cursor.moveToPiece @selected
 
+class Controller
+  constructor: ->
+    @keysDown = {}
 
+  handleKeyDown: (event) ->
+    @keysDown[event.keyCode] = true
+
+  handleKeyUp: (event) ->
+    @keysDown[event.keyCode] = false
+
+  action: -> @keysDown[VKEY_ENTER]
+  delta: ->
+    return {x:-1, y:0} if @keysDown[VKEY_LEFT]
+    return {x:0, y:-1} if @keysDown[VKEY_UP]
+    return {x:1, y:0} if @keysDown[VKEY_RIGHT]
+    return {x:0, y:1} if @keysDown[VKEY_DOWN]
+
+
+c = new Controller
 g = new Game
 
 document.addEventListener 'keydown', (e) ->
-  g.handleInput e
+  c.handleKeyDown e
+, false
+
+document.addEventListener 'keyup', (e) ->
+  c.handleKeyUp e
 , false
 
 gameLoop = ->
   clear()
   es.tick()
+  g.inputUpdated c
   e.draw ctx for e in es.entities when e.zIndex == RADIUS
   e.draw ctx for e in es.entities when e.zIndex == PIECE
   e.draw ctx for e in es.entities when e.zIndex == CURSOR
