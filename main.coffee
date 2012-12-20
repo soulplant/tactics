@@ -8,6 +8,10 @@ VKEY_UP = 38
 VKEY_RIGHT = 39
 VKEY_DOWN = 40
 
+# z-index
+PIECE = 0
+CURSOR = 1
+
 c = document.createElement 'canvas'
 c.width = WIDTH
 c.height = HEIGHT
@@ -25,12 +29,6 @@ class EntitySet
   add: (e) ->
     e.id = @nextId++
     @entities.push e
-
-  drawAll: (ctx) ->
-    e.draw ctx for e in @entities
-
-  tickAll: ->
-    e.tick() for e in @entities
 
 es = new EntitySet
 
@@ -52,7 +50,7 @@ class Entity
       between @y, y, @y + @height
 
   tick: ->
-  draw: ->
+  draw: (ctx) ->
 
 class GamePiece extends Entity
   constructor: (@tx, @ty, @name) ->
@@ -60,6 +58,7 @@ class GamePiece extends Entity
     @recalcOnscreenPos()
     @age = 0
     @selected = false
+    @zIndex = PIECE
 
   select: -> @selected = true
   deselect: -> @selected = false
@@ -87,16 +86,65 @@ class GamePiece extends Entity
   tick: ->
     @age++
 
+signum = (x) ->
+  if x < 0
+    -1
+  else if x == 0
+    0
+  else
+    1
+
+clamp = (x, max_mag) ->
+  signum(x) * Math.min(Math.abs(x), max_mag)
+
+class Cursor extends Entity
+  MAX_DELTA_PX = 2
+
+  constructor: (x, y) ->
+    super()
+    @x = x
+    @y = y
+    @zIndex = CURSOR
+
+  draw: (ctx) ->
+    ctx.strokeStyle = 'black'
+    ctx.strokeRect @x, @y, TILE_WIDTH, TILE_HEIGHT
+
+  isOverTargetPiece: ->
+    return false unless @targetPiece
+    return @targetPiece.x == @x and @targetPiece.y == @y
+
+  isMoving: ->
+    not @isOverTargetPiece()
+
+  tick: ->
+    if !@isOverTargetPiece()
+      @moveOneStepCloserToPiece()
+
+  moveOneStepCloserToPiece: ->
+    dx = @x - @targetPiece.x
+    dy = @y - @targetPiece.y
+    dx = clamp dx, MAX_DELTA_PX
+    dy = clamp dy, MAX_DELTA_PX
+    @x -= dx
+    @y -= dy
+
+  moveToPiece: (@targetPiece) ->
+
 class Game
   constructor: ->
     m = new GamePiece 0, 0, 'red'
     m1 = new GamePiece 1, 1, 'green'
+    @cursor = new Cursor 0, 0
+    @cursor.moveToPiece m
     @team = [m, m1]
     @nextToMove = 0
     @selected().select()
 
   receiveInput: (event) ->
+    return if @cursor.isMoving()
     delta = @eventToDir event
+    return unless delta
     @selected().moveBy delta
     @selectNext()
 
@@ -108,6 +156,7 @@ class Game
     @nextToMove++
     @nextToMove %= @team.length
     @selected().select()
+    @cursor.moveToPiece @selected()
 
   eventToDir: (event) ->
     switch event.keyCode
@@ -115,8 +164,6 @@ class Game
       when VKEY_UP then {x:0, y:-1}
       when VKEY_RIGHT then {x:1, y:0}
       when VKEY_DOWN then {x:0, y:1}
-
-  tick: ->
 
 g = new Game
 
@@ -126,11 +173,11 @@ document.addEventListener 'keydown', (e) ->
 
 gameLoop = ->
   clear()
-  es.tickAll()
-  es.drawAll ctx
-  # console.log 'hi'
+  e.tick() for e in es.entities
+  e.draw ctx for e in es.entities when e.zIndex == PIECE
+  e.draw ctx for e in es.entities when e.zIndex == CURSOR
 
-id = setInterval gameLoop, (1000/10)
+id = setInterval gameLoop, (1000/60)
 
 clear()
 
