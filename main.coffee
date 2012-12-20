@@ -13,6 +13,7 @@ RADIUS = 0
 PIECE = 1
 CURSOR = 2
 
+WALK_TICKS = (60 / 4)
 MOVEMENT_RANGE = 3
 
 c = document.createElement 'canvas'
@@ -62,15 +63,18 @@ class Entity
   tick: ->
   draw: (ctx) ->
 
+txInPx = (tx, ty) -> {x: tx * TILE_WIDTH, y: ty * TILE_HEIGHT}
+
 class GamePiece extends Entity
   constructor: (@tx, @ty, @name) ->
     super()
-    @recalcOnscreenPos()
-    @age = 0
     @selected = false
     @zIndex = PIECE
+    @ticksSinceWalkStart = -1
+    @recalcOnscreenPos()
 
   select: ->
+    return if @selected
     @selected = true
     @radius = new Radius @tx, @ty, MOVEMENT_RANGE
 
@@ -78,6 +82,22 @@ class GamePiece extends Entity
     @selected = false
     @radius?.kill()
     @radius = null
+
+  isMoving: -> @ticksSinceWalkStart != -1
+
+  tick: ->
+    if @isMoving()
+      @ticksSinceWalkStart = Math.min @ticksSinceWalkStart+1, WALK_TICKS
+      if @ticksSinceWalkStart == WALK_TICKS
+        # end of walk
+        @tx = @targetTx
+        @ty = @targetTy
+        @ticksSinceWalkStart = -1
+        @targetTx = undefined
+        @targetTy = undefined
+        @postWalkCb?()
+        @postWalkCb = null
+      @recalcOnscreenPos()
 
   draw: (ctx) ->
     ###
@@ -90,17 +110,24 @@ class GamePiece extends Entity
       ctx.strokeStyle = 'black'
       ctx.strokeRect @x, @y, @width, @height
 
-  moveBy: (pt) ->
-    @tx += pt.x
-    @ty += pt.y
+  moveBy: (pt, cb) ->
+    @targetTx = @tx + pt.x
+    @targetTy = @ty + pt.y
+    @ticksSinceWalkStart = 0
+    @postWalkCb = cb
     @recalcOnscreenPos()
 
   recalcOnscreenPos: ->
-    @x = @tx * TILE_WIDTH
-    @y = @ty * TILE_HEIGHT
-
-  tick: ->
-    @age++
+    p = txInPx @tx, @ty
+    if @isMoving()
+      n = txInPx @targetTx, @targetTy
+      walkCompletePercent = @ticksSinceWalkStart / WALK_TICKS
+      dx = n.x - p.x
+      dy = n.y - p.y
+      p.x += dx * walkCompletePercent
+      p.y += dy * walkCompletePercent
+    @x = p.x
+    @y = p.y
 
 signum = (x) ->
   if x < 0
@@ -134,7 +161,7 @@ class Cursor extends Entity
     not @isOverTargetPiece()
 
   tick: ->
-    if !@isOverTargetPiece()
+    unless @isOverTargetPiece()
       @moveOneStepCloserToPiece()
       if @isOverTargetPiece()
         @targetPiece.select()
@@ -181,11 +208,10 @@ class Game
     @selected.select()
 
   handleInput: (event) ->
-    return if @cursor.isMoving()
+    return if @cursor.isMoving() or @selected.isMoving()
     delta = @eventToDir event
     return unless delta
-    @selected.moveBy delta
-    @selectNext()
+    @selected.moveBy delta, => @selectNext()
 
   nextSelectedIndex: -> (@selectedIndex + 1) % @team.length
 
@@ -216,6 +242,8 @@ gameLoop = ->
   e.draw ctx for e in es.entities when e.zIndex == CURSOR
 
 id = setInterval gameLoop, (1000/60)
+
+stop = -> clearInterval id
 
 clear()
 
