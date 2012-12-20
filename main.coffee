@@ -13,6 +13,8 @@ RADIUS = 0
 PIECE = 1
 CURSOR = 2
 
+MOVEMENT_RANGE = 3
+
 c = document.createElement 'canvas'
 c.width = WIDTH
 c.height = HEIGHT
@@ -31,6 +33,10 @@ class EntitySet
     e.id = @nextId++
     @entities.push e
 
+  tick: ->
+    e.tick() for e in @entities
+    @entities = (e for e in @entities when e.alive)
+
 es = new EntitySet
 
 between: (l, x, h) -> l <= x <= h
@@ -44,11 +50,14 @@ class Entity
     @x = @y = 0
     @width = TILE_WIDTH
     @height = TILE_HEIGHT
+    @alive = true
     es.add @
 
   contains: (x, y) ->
     between @x, x, @x + @width and
       between @y, y, @y + @height
+
+  kill: -> @alive = false
 
   tick: ->
   draw: (ctx) ->
@@ -61,8 +70,14 @@ class GamePiece extends Entity
     @selected = false
     @zIndex = PIECE
 
-  select: -> @selected = true
-  deselect: -> @selected = false
+  select: ->
+    @selected = true
+    @radius = new Radius @tx, @ty, MOVEMENT_RANGE
+
+  deselect: ->
+    @selected = false
+    @radius?.kill()
+    @radius = null
 
   draw: (ctx) ->
     ###
@@ -156,7 +171,6 @@ class Game
   constructor: ->
     m = new GamePiece 0, 0, 'red'
     m1 = new GamePiece 1, 1, 'green'
-    @radius = new Radius 0, 0, 3
     @cursor = new Cursor 0, 0
     @cursor.moveToPiece m
     @team = [m, m1]
@@ -194,7 +208,7 @@ document.addEventListener 'keydown', (e) ->
 
 gameLoop = ->
   clear()
-  e.tick() for e in es.entities
+  es.tick()
   e.draw ctx for e in es.entities when e.zIndex == RADIUS
   e.draw ctx for e in es.entities when e.zIndex == PIECE
   e.draw ctx for e in es.entities when e.zIndex == CURSOR
