@@ -139,24 +139,23 @@ class Game
     @cursor.moveToPiece m
     @team = [m, m1]
     @nextToMove = 0
-    @selected().select()
+    @selected = @team[@nextToMove]
+    @selected.select()
 
   receiveInput: (event) ->
     return if @cursor.isMoving()
     delta = @eventToDir event
     return unless delta
-    @selected().moveBy delta
+    @selected.moveBy delta
     @selectNext()
 
-  selected: ->
-    @team[@nextToMove]
-
   selectNext: ->
-    @selected().deselect()
+    @selected.deselect()
     @nextToMove++
     @nextToMove %= @team.length
-    @selected().select()
-    @cursor.moveToPiece @selected()
+    @selected = @team[@nextToMove]
+    @selected.select()
+    @cursor.moveToPiece @selected
 
   eventToDir: (event) ->
     switch event.keyCode
