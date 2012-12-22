@@ -14,14 +14,18 @@ RADIUS = 0
 PIECE = 1
 CURSOR = 2
 
-WALK_TICKS = (60 / 4)
+WALK_TICKS = (60 / 6)
 MOVEMENT_RANGE = 3
+CURSOR_MOVE_PX = 3
 
 c = document.createElement 'canvas'
 c.width = WIDTH
 c.height = HEIGHT
 document.body.appendChild c
 ctx = c.getContext '2d'
+
+warriorImg = new Image()
+warriorImg.src = 'gfx/fighter.png'
 
 clear = ->
   ctx.clearRect 0, 0, WIDTH, HEIGHT
@@ -67,7 +71,7 @@ class Entity
 txInPx = (tx, ty) -> {x: tx * TILE_WIDTH, y: ty * TILE_HEIGHT}
 
 class GamePiece extends Entity
-  constructor: (@tx, @ty, @name) ->
+  constructor: (@tx, @ty, @img) ->
     super()
     @selected = false
     @zIndex = PIECE
@@ -101,12 +105,8 @@ class GamePiece extends Entity
       @recalcOnscreenPos()
 
   draw: (ctx) ->
-    ###
-    ctx.fillStyle = 'red'
-    ctx.fillRect @x, @y, @width, @height
-    ###
-    ctx.fillStyle = @name
-    ctx.fillRect @x, @y, @width, @height
+    ctx.drawImage @img, @x, @y
+    # ctx.fillRect @x, @y, @width, @height
     if @selected
       ctx.strokeStyle = 'black'
       ctx.strokeRect @x, @y, @width, @height
@@ -142,7 +142,6 @@ clamp = (x, max_mag) ->
   signum(x) * Math.min(Math.abs(x), max_mag)
 
 class Cursor extends Entity
-  MAX_DELTA_PX = 2
 
   constructor: (x, y) ->
     super()
@@ -170,8 +169,8 @@ class Cursor extends Entity
   moveOneStepCloserToPiece: ->
     dx = @x - @targetPiece.x
     dy = @y - @targetPiece.y
-    dx = clamp dx, MAX_DELTA_PX
-    dy = clamp dy, MAX_DELTA_PX
+    dx = clamp dx, CURSOR_MOVE_PX
+    dy = clamp dy, CURSOR_MOVE_PX
     @x -= dx
     @y -= dy
 
@@ -186,7 +185,7 @@ class Radius extends Entity
     @zIndex = RADIUS
 
   draw: (ctx) ->
-    ctx.fillStyle = 'grey'
+    ctx.fillStyle = '#ddd'
     for tx in [@tx-@radius..@tx+@radius]
       for ty in [@ty-@radius..@ty+@radius]
         @fillTileAt tx, ty if @distanceTo(tx, ty) <= @radius
@@ -236,8 +235,8 @@ eventToDir = (event) ->
 
 class Game
   constructor: ->
-    m = new GamePiece 0, 0, 'red'
-    m1 = new GamePiece 1, 1, 'green'
+    m = new GamePiece 0, 0, warriorImg
+    m1 = new GamePiece 1, 1, warriorImg
     @cursor = new Cursor 0, 0
     @cursor.moveToPiece m
     @team = [m, m1]
@@ -297,6 +296,7 @@ gameLoop = ->
   e.draw ctx for e in es.entities when e.zIndex == RADIUS
   e.draw ctx for e in es.entities when e.zIndex == PIECE
   e.draw ctx for e in es.entities when e.zIndex == CURSOR
+  ctx.drawImage img, 0, 0
 
 id = setInterval gameLoop, (1000/60)
 
