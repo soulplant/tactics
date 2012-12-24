@@ -142,7 +142,6 @@ clamp = (x, max_mag) ->
   signum(x) * Math.min(Math.abs(x), max_mag)
 
 class Cursor extends Entity
-
   constructor: (x, y) ->
     super()
     @x = x
@@ -174,7 +173,12 @@ class Cursor extends Entity
     @x -= dx
     @y -= dy
 
-  moveToPiece: (@targetPiece) ->
+  slideOverPiece: (@targetPiece) ->
+
+  # TODO Finish.
+  jumpToPiece: (targetPiece) ->
+    @x = targetPiece.x
+    @y = targetPiece.y
 
 class CostMap
   costAt: (x, y) -> 1
@@ -196,7 +200,7 @@ class Radius extends Entity
   fillTileAt: (tx, ty) ->
     ctx.fillRect tx * TILE_WIDTH, ty * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT
 
-class MoveSession
+class PieceMoveSession
   constructor: (@piece, @cb) ->
     @startTx = @piece.tx
     @startTy = @piece.ty
@@ -238,7 +242,7 @@ class Game
     m = new GamePiece 0, 0, warriorImg
     m1 = new GamePiece 1, 1, warriorImg
     @cursor = new Cursor 0, 0
-    @cursor.moveToPiece m
+    @cursor.slideOverPiece m
     @team = [m, m1]
     @selectedIndex = 0
     @selected = @team[@selectedIndex]
@@ -246,11 +250,11 @@ class Game
 
   inputUpdated: (controller) ->
     return if @cursor.isMoving() or @selected.isMoving()
-    if !@moveSession
-      @moveSession = new MoveSession @selected, =>
-        @moveSession = null
+    if !@movePiece
+      @movePiece = new PieceMoveSession @selected, =>
+        @movePiece = null
         @selectNext()
-    @moveSession.handleInput controller
+    @movePiece.handleInput controller
 
   nextSelectedIndex: -> (@selectedIndex + 1) % @team.length
 
@@ -258,7 +262,7 @@ class Game
     @selected.deselect()
     @selectedIndex = @nextSelectedIndex()
     @selected = @team[@selectedIndex]
-    @cursor.moveToPiece @selected
+    @cursor.slideOverPiece @selected
 
 class Controller
   constructor: ->
