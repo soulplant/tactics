@@ -300,7 +300,6 @@ gameLoop = ->
   e.draw ctx for e in es.entities when e.zIndex == RADIUS
   e.draw ctx for e in es.entities when e.zIndex == PIECE
   e.draw ctx for e in es.entities when e.zIndex == CURSOR
-  ctx.drawImage img, 0, 0
 
 id = setInterval gameLoop, (1000/60)
 
