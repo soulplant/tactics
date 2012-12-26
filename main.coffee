@@ -110,6 +110,9 @@ class GamePiece extends Entity
       ctx.strokeStyle = 'black'
       ctx.strokeRect @x, @y, @width, @height
 
+  setDirection: (dir) ->
+    console.log 'player now facing', dir
+
   moveBy: (pt, cb) ->
     @targetTx = @tx + pt.x
     @targetTy = @ty + pt.y
@@ -212,10 +215,11 @@ class PieceMoveSession
 
     delta = controller.delta()
     return unless delta
-    return unless @canMoveTo delta
-    @pieceMoving = true
-    @piece.moveBy delta, =>
-      @pieceMoving = false
+    @piece.setDirection controller.dir()
+    if @canMoveTo delta
+      @pieceMoving = true
+      @piece.moveBy delta, =>
+        @pieceMoving = false
 
   canMoveTo: (delta) ->
     x = @piece.tx + delta.x
@@ -241,6 +245,7 @@ class Game
     @selectedIndex = 0
     @selected = @team[@selectedIndex]
     @selected.select()
+    @movePiece = null
     @startTurn 0, 0, m
 
   inputUpdated: (controller) ->
@@ -278,6 +283,11 @@ class Controller
     @keysDown[event.keyCode] = false
 
   action: -> @keysDown[VKEY_ENTER]
+  dir: ->
+    return 'left' if @keysDown[VKEY_LEFT]
+    return 'right' if @keysDown[VKEY_RIGHT]
+    return 'up' if @keysDown[VKEY_UP]
+    return 'down' if @keysDown[VKEY_DOWN]
   delta: ->
     return {x:-1, y:0} if @keysDown[VKEY_LEFT]
     return {x:0, y:-1} if @keysDown[VKEY_UP]
