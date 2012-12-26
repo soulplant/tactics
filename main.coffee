@@ -106,7 +106,6 @@ class GamePiece extends Entity
 
   draw: (ctx) ->
     ctx.drawImage @img, @x, @y
-    # ctx.fillRect @x, @y, @width, @height
     if @selected
       ctx.strokeStyle = 'black'
       ctx.strokeRect @x, @y, @width, @height
@@ -163,7 +162,7 @@ class Cursor extends Entity
     unless @isOverTargetPiece()
       @moveOneStepCloserToPiece()
       if @isOverTargetPiece()
-        @targetPiece.select()
+        @cb()
 
   moveOneStepCloserToPiece: ->
     dx = @x - @targetPiece.x
@@ -173,12 +172,9 @@ class Cursor extends Entity
     @x -= dx
     @y -= dy
 
-  slideOverPiece: (@targetPiece) ->
-
-  # TODO Finish.
-  jumpToPiece: (targetPiece) ->
-    @x = targetPiece.x
-    @y = targetPiece.y
+  slideOverPiece: (@targetPiece, @cb) ->
+    if @isOverTargetPiece()
+      @cb()
 
 class CostMap
   costAt: (x, y) -> 1
@@ -241,28 +237,35 @@ class Game
   constructor: ->
     m = new GamePiece 0, 0, warriorImg
     m1 = new GamePiece 1, 1, warriorImg
-    @cursor = new Cursor 0, 0
-    @cursor.slideOverPiece m
     @team = [m, m1]
     @selectedIndex = 0
     @selected = @team[@selectedIndex]
     @selected.select()
+    @startTurn 0, 0, m
 
   inputUpdated: (controller) ->
-    return if @cursor.isMoving() or @selected.isMoving()
-    if !@movePiece
-      @movePiece = new PieceMoveSession @selected, =>
-        @movePiece = null
-        @selectNext()
-    @movePiece.handleInput controller
+    if @movePiece
+      @movePiece.handleInput controller
 
   nextSelectedIndex: -> (@selectedIndex + 1) % @team.length
 
   selectNext: ->
     @selected.deselect()
+    x = @selected.x
+    y = @selected.y
     @selectedIndex = @nextSelectedIndex()
     @selected = @team[@selectedIndex]
-    @cursor.slideOverPiece @selected
+    @startTurn x, y, @selected
+
+  startTurn: (x, y, piece) ->
+    @cursor = new Cursor x, y
+    @cursor.slideOverPiece piece, =>
+      piece.select()
+      @cursor.kill()
+      @cursor = null
+      @movePiece = new PieceMoveSession piece, =>
+        @movePiece = null
+        @selectNext()
 
 class Controller
   constructor: ->
