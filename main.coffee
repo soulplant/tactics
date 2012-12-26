@@ -24,8 +24,16 @@ c.height = HEIGHT
 document.body.appendChild c
 ctx = c.getContext '2d'
 
-warriorImg = new Image()
-warriorImg.src = 'gfx/fighter.png'
+loadImage = (fn) ->
+  img = new Image()
+  img.src = fn
+  img
+
+warriorImgs = {}
+warriorImgs['left'] = loadImage 'gfx/fighter-l.png'
+warriorImgs['right'] = loadImage 'gfx/fighter-r.png'
+warriorImgs['up'] = loadImage 'gfx/fighter-u.png'
+warriorImgs['down'] = loadImage 'gfx/fighter-d.png'
 
 clear = ->
   ctx.clearRect 0, 0, WIDTH, HEIGHT
@@ -71,12 +79,13 @@ class Entity
 txInPx = (tx, ty) -> {x: tx * TILE_WIDTH, y: ty * TILE_HEIGHT}
 
 class GamePiece extends Entity
-  constructor: (@tx, @ty, @img) ->
+  constructor: (@tx, @ty, @imgSet) ->
     super()
     @selected = false
     @zIndex = PIECE
     @ticksSinceWalkStart = -1
     @recalcOnscreenPos()
+    @dir = 'down'
 
   select: ->
     return if @selected
@@ -84,6 +93,7 @@ class GamePiece extends Entity
     @radius = new Radius @tx, @ty, MOVEMENT_RANGE
 
   deselect: ->
+    @dir = 'down'
     @selected = false
     @radius?.kill()
     @radius = null
@@ -105,13 +115,12 @@ class GamePiece extends Entity
       @recalcOnscreenPos()
 
   draw: (ctx) ->
-    ctx.drawImage @img, @x, @y
+    ctx.drawImage @imgSet[@dir], @x, @y
     if @selected
       ctx.strokeStyle = 'black'
       ctx.strokeRect @x, @y, @width, @height
 
-  setDirection: (dir) ->
-    console.log 'player now facing', dir
+  setDirection: (@dir) ->
 
   moveBy: (pt, cb) ->
     @targetTx = @tx + pt.x
@@ -239,8 +248,8 @@ eventToDir = (event) ->
 
 class Game
   constructor: ->
-    m = new GamePiece 0, 0, warriorImg
-    m1 = new GamePiece 1, 1, warriorImg
+    m = new GamePiece 0, 0, warriorImgs
+    m1 = new GamePiece 1, 1, warriorImgs
     @team = [m, m1]
     @selectedIndex = 0
     @selected = @team[@selectedIndex]
