@@ -201,7 +201,7 @@ class Radius extends Entity
     @zIndex = RADIUS
 
   draw: (ctx) ->
-    ctx.fillStyle = '#ddd'
+    ctx.fillStyle = 'rgba(30, 30, 30, 0.30)'
     for tx in [@tx-@radius..@tx+@radius]
       for ty in [@ty-@radius..@ty+@radius]
         @fillTileAt tx, ty if @distanceTo(tx, ty) <= @radius
