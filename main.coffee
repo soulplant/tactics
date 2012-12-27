@@ -35,6 +35,10 @@ warriorImgs['right'] = loadImage 'gfx/fighter-r.png'
 warriorImgs['up'] = loadImage 'gfx/fighter-u.png'
 warriorImgs['down'] = loadImage 'gfx/fighter-d.png'
 
+tileImgs = {}
+tileImgs['grass'] = loadImage 'gfx/grass.png'
+tileImgs['dirt'] = loadImage 'gfx/dirt.png'
+
 clear = ->
   ctx.clearRect 0, 0, WIDTH, HEIGHT
 
@@ -246,6 +250,19 @@ eventToDir = (event) ->
     when VKEY_RIGHT then {x:1, y:0}
     when VKEY_DOWN then {x:0, y:1}
 
+class TileMap
+  constructor: (@width, @height, @imgSet) ->
+    @tiles = (x, y) -> if x < 5 then 1 else 0
+    @names = ['grass', 'dirt']
+
+  draw: (ctx) ->
+    for x in [0...@width]
+      for y in [0...@height]
+        xPx = x * TILE_WIDTH
+        yPx = y * TILE_HEIGHT
+        ctx.drawImage @imgSet[@names[@tiles(x, y)]], xPx, yPx
+
+
 class Game
   constructor: ->
     m = new GamePiece 0, 0, warriorImgs
@@ -306,6 +323,7 @@ class Controller
 
 c = new Controller
 g = new Game
+tm = new TileMap 10, 10, tileImgs
 
 document.addEventListener 'keydown', (e) ->
   c.handleKeyDown e
@@ -319,6 +337,7 @@ gameLoop = ->
   clear()
   es.tick()
   g.inputUpdated c
+  tm.draw ctx
   e.draw ctx for e in es.entities when e.zIndex == RADIUS
   e.draw ctx for e in es.entities when e.zIndex == PIECE
   e.draw ctx for e in es.entities when e.zIndex == CURSOR
