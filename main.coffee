@@ -94,12 +94,10 @@ class GamePiece extends Entity
   select: ->
     return if @selected
     @selected = true
-    @radius = new Radius @tx, @ty, MOVEMENT_RANGE
 
   deselect: ->
     @dir = 'down'
     @selected = false
-    @radius?.kill()
     @radius = null
 
   isMoving: -> @ticksSinceWalkStart != -1
@@ -196,15 +194,33 @@ class CostMap
   costAt: (x, y) -> 1
 
 class Radius extends Entity
-  constructor: (@tx, @ty, @radius) ->
+  MAX_MAP_WIDTH = 1024
+  constructor: (@tx, @ty, @movePoints, @tileMap) ->
+    if !@tileMap
+      debugger
     super
     @zIndex = RADIUS
+    @canMove = {}
+    @populateMap @canMove, @tx, @ty, @movePoints, {}
+    console.log @canMove
+
+  populateMap: (m, x, y, movePointsLeft, visited) ->
+    return if movePointsLeft <= 0
+    return if visited[[x, y]]
+    m[[x, y]] = movePointsLeft
+    visited[[x, y]] = true
+    for [dy, dx] in [[0, -1], [0, 1], [1, 0], [-1, 0]]
+      continue if visited[[x + dx, y + dy]]
+      pl = movePointsLeft - @tileMap.costAt x + dx, y + dy
+      @populateMap m, x + dx, y + dy, pl, visited
+
 
   draw: (ctx) ->
     ctx.fillStyle = 'rgba(30, 30, 30, 0.30)'
-    for tx in [@tx-@radius..@tx+@radius]
-      for ty in [@ty-@radius..@ty+@radius]
-        @fillTileAt tx, ty if @distanceTo(tx, ty) <= @radius
+    for tx in [@tx-@movePoints..@tx+@movePoints]
+      for ty in [@ty-@movePoints..@ty+@movePoints]
+        if @canMove[[tx, ty]]
+          @fillTileAt tx, ty
 
   distanceTo: (tx, ty) ->
     Math.abs(@tx - tx) + Math.abs(@ty - ty)
@@ -213,10 +229,9 @@ class Radius extends Entity
     ctx.fillRect tx * TILE_WIDTH, ty * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT
 
 class PieceMoveSession
-  constructor: (@piece, @cb) ->
+  constructor: (@piece, @radius, @cb) ->
     @startTx = @piece.tx
     @startTy = @piece.ty
-    @radius = new Radius @startTx, @startTy, MOVEMENT_RANGE
     @done = false
     @pieceMoving = false
 
@@ -229,15 +244,11 @@ class PieceMoveSession
     delta = controller.delta()
     return unless delta
     @piece.setDirection controller.dir()
-    if @canMoveTo delta
+    {x:dx, y:dy} = delta
+    if @radius.canMove[[@piece.tx + dx, @piece.ty + dy]]
       @pieceMoving = true
       @piece.moveBy delta, =>
         @pieceMoving = false
-
-  canMoveTo: (delta) ->
-    x = @piece.tx + delta.x
-    y = @piece.ty + delta.y
-    Math.abs(@startTx - x) + Math.abs(@startTy - y) <= MOVEMENT_RANGE
 
 isActionEvent = (event) ->
   switch event.keyCode
@@ -251,8 +262,11 @@ eventToDir = (event) ->
     when VKEY_DOWN then {x:0, y:1}
 
 class TileMap
+  GRASS = 0
+  DIRT = 1
   constructor: (@width, @height, @imgSet) ->
-    @tiles = (x, y) -> if x < 5 then 1 else 0
+    @tiles = (x, y) -> if x < 5 then DIRT else GRASS
+    @costs = [1, 2]
     @names = ['grass', 'dirt']
 
   draw: (ctx) ->
@@ -262,11 +276,14 @@ class TileMap
         yPx = y * TILE_HEIGHT
         ctx.drawImage @imgSet[@names[@tiles(x, y)]], xPx, yPx
 
+  costAt: (x, y) ->
+    t = @costs[@tiles x, y]
+    if t then t else 100
 
 class Game
-  constructor: ->
-    m = new GamePiece 0, 0, warriorImgs
-    m1 = new GamePiece 1, 1, warriorImgs
+  constructor: (@tileMap) ->
+    m = new GamePiece 1, 2, warriorImgs
+    m1 = new GamePiece 8, 2, warriorImgs
     @team = [m, m1]
     @selectedIndex = 0
     @selected = @team[@selectedIndex]
@@ -294,7 +311,9 @@ class Game
       piece.select()
       @cursor.kill()
       @cursor = null
-      @movePiece = new PieceMoveSession piece, =>
+
+      radius = new Radius piece.tx, piece.ty, MOVEMENT_RANGE, @tileMap
+      @movePiece = new PieceMoveSession piece, radius, =>
         @movePiece = null
         @selectNext()
 
@@ -321,9 +340,9 @@ class Controller
     return {x:0, y:1} if @keysDown[VKEY_DOWN]
 
 
-c = new Controller
-g = new Game
 tm = new TileMap 10, 10, tileImgs
+c = new Controller
+g = new Game tm
 
 document.addEventListener 'keydown', (e) ->
   c.handleKeyDown e
