@@ -202,7 +202,6 @@ class Radius extends Entity
     @zIndex = RADIUS
     @canMove = {}
     @populateMap @canMove, @tx, @ty, @movePoints, {}
-    console.log @canMove
 
   populateMap: (m, x, y, movePointsLeft, visited) ->
     return if movePointsLeft <= 0
@@ -210,9 +209,11 @@ class Radius extends Entity
     m[[x, y]] = movePointsLeft
     visited[[x, y]] = true
     for [dy, dx] in [[0, -1], [0, 1], [1, 0], [-1, 0]]
-      continue if visited[[x + dx, y + dy]]
-      pl = movePointsLeft - @tileMap.costAt x + dx, y + dy
-      @populateMap m, x + dx, y + dy, pl, visited
+      rx = x + dx
+      ry = y + dy
+      continue if visited[[rx, ry]]
+      pl = movePointsLeft - @tileMap.costAt rx, ry
+      @populateMap m, rx, ry, pl, visited
 
 
   draw: (ctx) ->
