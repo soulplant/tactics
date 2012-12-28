@@ -107,7 +107,7 @@ class Entity
   tick: ->
   draw: (ctx) ->
 
-class MenuButton extends Entity
+class YesNoOption extends Entity
   MAX_OFFSET = 30
   OFFSET_PPS = FPS / 5
   SLIDE_DURATION = 5
@@ -118,16 +118,40 @@ class MenuButton extends Entity
     @y = 240 - 16
     @offset = 0
     @zIndex = CURSOR
-    @slideOut = new PositionSlide @, {x:0, y:-30}, SLIDE_DURATION, =>
-      @slideOut = null
-    @addSubTicker @slideOut
+    @slideIn = new PositionSlide @, {x:0, y:-30}, SLIDE_DURATION, =>
+      @slideIn = null
+    @slideOut = null
+    @addSubTicker @slideIn
+    @currentChoice = 'yes'
+    @done = false
 
-  isMoving: -> @slideOut != null
+  isMoving: -> @slideIn != null or @slideOut != null
+
+  yes: -> @currentChoice == 'yes'
+  no: -> @currentChoice == 'no'
+
+  inputUpdated: (controller) ->
+    return false if @isMoving()
+    return true if @done
+    if controller.left()
+      @currentChoice = 'yes'
+      console.log @currentChoice
+    if controller.right()
+      @currentChoice = 'no'
+      console.log @currentChoice
+    if controller.action()
+      throw 'hm' if @slideOut
+      @slideOut = new PositionSlide @, {x:0, y:30}, SLIDE_DURATION, =>
+        @slideOut = null
+        @done = true
+        @kill()
+      @addSubTicker @slideOut
+    false
 
   tick: ->
 
   draw: (ctx) ->
-    ctx.fillStyle = 'red'
+    ctx.fillStyle = if @currentChoice == 'yes' then 'green' else 'red'
     ctx.fillRect @x, @y, 16, 16
 
 txInPx = (tx, ty) -> {x: tx * TILE_WIDTH, y: ty * TILE_HEIGHT}
@@ -284,18 +308,6 @@ class Radius extends Entity
   fillTileAt: (tx, ty) ->
     ctx.fillRect tx * TILE_WIDTH, ty * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT
 
-class MenuSession
-  constructor: ->
-    @mb = new MenuButton
-
-  inputUpdated: (controller) ->
-    return false if @mb.isMoving()
-    if controller.action()
-      @mb.kill()
-      @mb = null
-      return true
-    false
-
 class PieceMoveSession
   constructor: (@piece, @radius) ->
     @startTx = @piece.tx
@@ -307,10 +319,13 @@ class PieceMoveSession
   inputUpdated: (controller) ->
     return false if @pieceMoving
     return true if @menuDone
-    if controller.action()
-      @menuSession = new MenuSession
-      fs.push @menuSession, =>
-        @menuSession = null
+    if controller.action() and not @yesNoOption
+      @yesNoOption = new YesNoOption
+      fs.push @yesNoOption, =>
+        yno = @yesNoOption
+        @yesNoOption = null
+        if yno.no()  # not done with this move
+          return
         @radius.kill()
         @menuDone = true
 
@@ -403,6 +418,8 @@ class Controller
     @keysDown[event.keyCode] = false
 
   action: -> @keysDown[VKEY_ENTER]
+  left: -> @dir() == 'left'
+  right: -> @dir() == 'right'
   dir: ->
     return 'left' if @keysDown[VKEY_LEFT]
     return 'right' if @keysDown[VKEY_RIGHT]
