@@ -14,7 +14,8 @@ RADIUS = 0
 PIECE = 1
 CURSOR = 2
 
-WALK_TICKS = (60 / 6)
+FPS = 60
+WALK_TICKS = (FPS / 6)
 MOVEMENT_RANGE = 3
 CURSOR_MOVE_PX = 3
 
@@ -52,7 +53,7 @@ class EntitySet
     @entities.push e
 
   tick: ->
-    e.tick() for e in @entities
+    e.baseTick() for e in @entities
     @entities = (e for e in @entities when e.alive)
 
 es = new EntitySet
@@ -69,27 +70,87 @@ class Entity
     @width = TILE_WIDTH
     @height = TILE_HEIGHT
     @alive = true
+    @subTickers = []
     es.add @
 
   contains: (x, y) ->
     between @x, x, @x + @width and
       between @y, y, @y + @height
 
-  kill: -> @alive = false
+  kill: ->
+    @subTickers = []
+    @alive = false
+
+  addSubTicker: (st) ->
+    @subTickers.push st
+
+  baseTick: ->
+    @subTickers = (s for s in @subTickers when not s.tick())
+    @tick()
 
   tick: ->
   draw: (ctx) ->
 
+class MenuButton extends Entity
+  MAX_OFFSET = 30
+  OFFSET_PPS = FPS / 5
+  SLIDE_DURATION = 5
+
+  constructor: ->
+    super()
+    @x = (320/2 - 16) / 2
+    @y = 240 - 16
+    @offset = 0
+    @zIndex = CURSOR
+    @slideOut = new PositionSlide @, {x:0, y:-30}, SLIDE_DURATION, =>
+      @slideOut = null
+    @addSubTicker @slideOut
+
+  isMoving: -> @slideOut != null
+
+  tick: ->
+
+  draw: (ctx) ->
+    ctx.fillStyle = 'red'
+    ctx.fillRect @x, @y, 16, 16
+
 txInPx = (tx, ty) -> {x: tx * TILE_WIDTH, y: ty * TILE_HEIGHT}
+ptEquals = (p, q) -> p.x == q.x and p.y == q.y
+
+class PositionSlide
+  constructor: (@entity, @delta, @duration, @cb) ->
+    @startPos = {x: @entity.x, y: @entity.y}
+    @targetPos = {x: @entity.x + @delta.x, y: @entity.y + @delta.y}
+    @elapsed = 0
+
+  atTargetPos: ->
+    ptEquals @targetPos, @entity
+
+  tick: ->
+    if @atTargetPos()
+      @cb()
+      return true
+    @elapsed++
+    @interpolatePosition()
+    false
+
+  interpolatePosition: ->
+    ratio = @elapsed / @duration
+    dx = @targetPos.x - @startPos.x
+    dy = @targetPos.y - @startPos.y
+    @entity.x = @startPos.x + dx * ratio
+    @entity.y = @startPos.y + dy * ratio
 
 class GamePiece extends Entity
   constructor: (@tx, @ty, @imgSet) ->
     super()
     @selected = false
     @zIndex = PIECE
-    @ticksSinceWalkStart = -1
-    @recalcOnscreenPos()
+    @posSlide = null
     @dir = 'down'
+    @x = @tx * TILE_WIDTH
+    @y = @ty * TILE_HEIGHT
+    console.log @
 
   select: ->
     return if @selected
@@ -100,21 +161,9 @@ class GamePiece extends Entity
     @selected = false
     @radius = null
 
-  isMoving: -> @ticksSinceWalkStart != -1
+  isMoving: -> @posSlide != null
 
   tick: ->
-    if @isMoving()
-      @ticksSinceWalkStart = Math.min @ticksSinceWalkStart+1, WALK_TICKS
-      if @ticksSinceWalkStart == WALK_TICKS
-        # end of walk
-        @tx = @targetTx
-        @ty = @targetTy
-        @ticksSinceWalkStart = -1
-        @targetTx = undefined
-        @targetTy = undefined
-        @postWalkCb?()
-        @postWalkCb = null
-      @recalcOnscreenPos()
 
   draw: (ctx) ->
     ctx.drawImage @imgSet[@dir], @x, @y
@@ -124,24 +173,15 @@ class GamePiece extends Entity
 
   setDirection: (@dir) ->
 
-  moveBy: (pt, cb) ->
-    @targetTx = @tx + pt.x
-    @targetTy = @ty + pt.y
-    @ticksSinceWalkStart = 0
-    @postWalkCb = cb
-    @recalcOnscreenPos()
-
-  recalcOnscreenPos: ->
-    p = txInPx @tx, @ty
-    if @isMoving()
-      n = txInPx @targetTx, @targetTy
-      walkCompletePercent = @ticksSinceWalkStart / WALK_TICKS
-      dx = n.x - p.x
-      dy = n.y - p.y
-      p.x += dx * walkCompletePercent
-      p.y += dy * walkCompletePercent
-    @x = p.x
-    @y = p.y
+  moveBy: (delta, cb) ->
+    throw "already moving" if @isMoving()
+    dpx = {x: delta.x * TILE_WIDTH, y: delta.y * TILE_HEIGHT}
+    @posSlide = new PositionSlide @, dpx, WALK_TICKS, =>
+      @tx += delta.x
+      @ty += delta.y
+      cb()
+      @posSlide = null
+    @addSubTicker @posSlide
 
 signum = (x) ->
   if x < 0
@@ -198,7 +238,7 @@ class Radius extends Entity
   constructor: (@tx, @ty, @movePoints, @tileMap) ->
     if !@tileMap
       debugger
-    super
+    super()
     @zIndex = RADIUS
     @canMove = {}
     @populateMap @canMove, @tx, @ty, @movePoints, {}
@@ -229,6 +269,17 @@ class Radius extends Entity
   fillTileAt: (tx, ty) ->
     ctx.fillRect tx * TILE_WIDTH, ty * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT
 
+class MenuSession
+  constructor: (@cb) ->
+    @mb = new MenuButton
+
+  handleInput: (controller) ->
+    return if @mb.isMoving()
+    if controller.action()
+      @mb.kill()
+      @mb = null
+      @cb()
+
 class PieceMoveSession
   constructor: (@piece, @radius, @cb) ->
     @startTx = @piece.tx
@@ -238,9 +289,13 @@ class PieceMoveSession
 
   handleInput: (controller) ->
     return if @pieceMoving
+    if @menuSession
+      return @menuSession.handleInput controller
     if controller.action()
-      @radius.kill()
-      @cb()
+      @menuSession = new MenuSession =>
+        @menuSession = null
+        @radius.kill()
+        @cb()
 
     delta = controller.delta()
     return unless delta
@@ -362,7 +417,7 @@ gameLoop = ->
   e.draw ctx for e in es.entities when e.zIndex == PIECE
   e.draw ctx for e in es.entities when e.zIndex == CURSOR
 
-id = setInterval gameLoop, (1000/60)
+id = setInterval gameLoop, (1000/FPS)
 
 stop = -> clearInterval id
 
