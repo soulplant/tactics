@@ -150,9 +150,17 @@ class YesNoOption extends Entity
 
   tick: ->
 
+  drawBox: (style, x, y, w, h, border) ->
+    ctx.fillStyle = style
+    ctx.fillRect x, y, w, h
+    if border
+      ctx.strokeStyle = 'black'
+      ctx.strokeRect x, y, w, h
+
   draw: (ctx) ->
-    ctx.fillStyle = if @currentChoice == 'yes' then 'green' else 'red'
-    ctx.fillRect @x, @y, 16, 16
+    # left box
+    @drawBox 'green', @x - 16, @y, 16, 16, @currentChoice == 'yes'
+    @drawBox 'red', @x + 16, @y, 16, 16, @currentChoice != 'yes'
 
 txInPx = (tx, ty) -> {x: tx * TILE_WIDTH, y: ty * TILE_HEIGHT}
 ptEquals = (p, q) -> p.x == q.x and p.y == q.y
