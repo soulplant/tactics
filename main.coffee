@@ -56,7 +56,23 @@ class EntitySet
     e.baseTick() for e in @entities
     @entities = (e for e in @entities when e.alive)
 
+class KeyFocusStack
+  constructor: ->
+    @stack = []
+
+  push: (entity, cb) ->
+    @stack.push {entity, cb}
+
+  inputUpdated: (controller) ->
+    return if @stack.length == 0
+    pair = @stack[@stack.length - 1]
+    if pair.entity.inputUpdated controller
+      console.log 'done with', pair.entity
+      @stack.pop()
+      pair.cb?()
+
 es = new EntitySet
+fs = new KeyFocusStack
 
 between: (l, x, h) -> l <= x <= h
 
@@ -150,7 +166,6 @@ class GamePiece extends Entity
     @dir = 'down'
     @x = @tx * TILE_WIDTH
     @y = @ty * TILE_HEIGHT
-    console.log @
 
   select: ->
     return if @selected
@@ -270,32 +285,34 @@ class Radius extends Entity
     ctx.fillRect tx * TILE_WIDTH, ty * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT
 
 class MenuSession
-  constructor: (@cb) ->
+  constructor: ->
     @mb = new MenuButton
 
-  handleInput: (controller) ->
-    return if @mb.isMoving()
+  inputUpdated: (controller) ->
+    return false if @mb.isMoving()
     if controller.action()
       @mb.kill()
       @mb = null
-      @cb()
+      return true
+    false
 
 class PieceMoveSession
-  constructor: (@piece, @radius, @cb) ->
+  constructor: (@piece, @radius) ->
     @startTx = @piece.tx
     @startTy = @piece.ty
     @done = false
     @pieceMoving = false
+    @menuDone = false
 
-  handleInput: (controller) ->
-    return if @pieceMoving
-    if @menuSession
-      return @menuSession.handleInput controller
+  inputUpdated: (controller) ->
+    return false if @pieceMoving
+    return true if @menuDone
     if controller.action()
-      @menuSession = new MenuSession =>
+      @menuSession = new MenuSession
+      fs.push @menuSession, =>
         @menuSession = null
         @radius.kill()
-        @cb()
+        @menuDone = true
 
     delta = controller.delta()
     return unless delta
@@ -305,6 +322,7 @@ class PieceMoveSession
       @pieceMoving = true
       @piece.moveBy delta, =>
         @pieceMoving = false
+    false
 
 isActionEvent = (event) ->
   switch event.keyCode
@@ -345,11 +363,11 @@ class Game
     @selected = @team[@selectedIndex]
     @selected.select()
     @movePiece = null
+    fs.push @
     @startTurn 0, 0, m
 
   inputUpdated: (controller) ->
-    if @movePiece
-      @movePiece.handleInput controller
+    return false
 
   nextSelectedIndex: -> (@selectedIndex + 1) % @team.length
 
@@ -369,7 +387,8 @@ class Game
       @cursor = null
 
       radius = new Radius piece.tx, piece.ty, MOVEMENT_RANGE, @tileMap
-      @movePiece = new PieceMoveSession piece, radius, =>
+      @movePiece = new PieceMoveSession piece, radius
+      fs.push @movePiece, =>
         @movePiece = null
         @selectNext()
 
@@ -411,7 +430,7 @@ document.addEventListener 'keyup', (e) ->
 gameLoop = ->
   clear()
   es.tick()
-  g.inputUpdated c
+  fs.inputUpdated c
   tm.draw ctx
   e.draw ctx for e in es.entities when e.zIndex == RADIUS
   e.draw ctx for e in es.entities when e.zIndex == PIECE
