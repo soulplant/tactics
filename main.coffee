@@ -9,6 +9,11 @@ VKEY_RIGHT = 39
 VKEY_DOWN = 40
 VKEY_ENTER = 13
 
+VKEY_H = 72
+VKEY_J = 74
+VKEY_K = 75
+VKEY_L = 76
+
 # z-index
 RADIUS = 0
 PIECE = 1
@@ -429,16 +434,16 @@ class Controller
   left: -> @dir() == 'left'
   right: -> @dir() == 'right'
   dir: ->
-    return 'left' if @keysDown[VKEY_LEFT]
-    return 'right' if @keysDown[VKEY_RIGHT]
-    return 'up' if @keysDown[VKEY_UP]
-    return 'down' if @keysDown[VKEY_DOWN]
+    return 'left' if @keysDown[VKEY_LEFT] or @keysDown[VKEY_H]
+    return 'right' if @keysDown[VKEY_RIGHT] or @keysDown[VKEY_L]
+    return 'up' if @keysDown[VKEY_UP] or @keysDown[VKEY_K]
+    return 'down' if @keysDown[VKEY_DOWN] or @keysDown[VKEY_J]
   delta: ->
-    return {x:-1, y:0} if @keysDown[VKEY_LEFT]
-    return {x:0, y:-1} if @keysDown[VKEY_UP]
-    return {x:1, y:0} if @keysDown[VKEY_RIGHT]
-    return {x:0, y:1} if @keysDown[VKEY_DOWN]
-
+    switch @dir()
+      when 'left' then {x:-1, y:0}
+      when 'right' then {x:1, y:0}
+      when 'up' then {x:0, y:-1}
+      when 'down' then {x:0, y:1}
 
 tm = new TileMap 10, 10, tileImgs
 c = new Controller
