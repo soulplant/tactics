@@ -68,13 +68,20 @@ class KeyFocusStack
   push: (entity, cb) ->
     @stack.push {entity, cb}
 
+  peek: ->
+    throw "empty stack" if @stack.length == 0
+    @stack[@stack.length - 1]
+
+  pop: ->
+    pair = @peek()
+    @stack.pop()
+    pair.cb?()
+    pair
+
   inputUpdated: (controller) ->
     return if @stack.length == 0
-    pair = @stack[@stack.length - 1]
-    if pair.entity.inputUpdated controller
-      console.log 'done with', pair.entity
-      @stack.pop()
-      pair.cb?()
+    if @peek().entity.inputUpdated controller
+      @pop()
 
 es = new EntitySet
 fs = new KeyFocusStack
@@ -332,7 +339,7 @@ class PieceMoveSession
   inputUpdated: (controller) ->
     return false if @pieceMoving
     return true if @menuDone
-    if controller.action() and not @yesNoOption
+    if controller.action()
       @yesNoOption = new YesNoOption
       fs.push @yesNoOption, =>
         yno = @yesNoOption
@@ -471,9 +478,3 @@ id = setInterval gameLoop, (1000/FPS)
 stop = -> clearInterval id
 
 clear()
-
-###
-ctx.fillStyle = 'red'
-ctx.fillRect 0, 0, 20, 20
-console.log ctx
-###
