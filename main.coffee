@@ -291,28 +291,34 @@ class Cursor extends Entity
     if @isOverTargetPiece()
       @cb()
 
+# breadth first search
+# found - map from reachable points to the depth left from that point
+# start - starting point of the search (in this case, a point of form [x, y])
+# depth - how deep to search
+# costFn - the cost of getting to each point
+# neighborsFn - generates the list of neighboring points
+# visited points set
+bfs = (found, start, depth, costFn, neighborsFn, visited) ->
+  return if depth <= 0
+  return if visited[start]
+  found[start] = depth
+  visited[start] = true
+  ns = neighborsFn start
+  for n in ns
+    continue if visited[n]
+    d = depth - costFn n
+    bfs found, n, d, costFn, neighborsFn, visited
+
 class Radius extends Entity
   MAX_MAP_WIDTH = 1024
   constructor: (@tx, @ty, @movePoints, @tileMap) ->
-    if !@tileMap
-      debugger
     super()
     @zIndex = RADIUS
     @canMove = {}
-    @populateMap @canMove, @tx, @ty, @movePoints, {}
-
-  populateMap: (m, x, y, movePointsLeft, visited) ->
-    return if movePointsLeft <= 0
-    return if visited[[x, y]]
-    m[[x, y]] = movePointsLeft
-    visited[[x, y]] = true
-    for [dy, dx] in [[0, -1], [0, 1], [1, 0], [-1, 0]]
-      rx = x + dx
-      ry = y + dy
-      continue if visited[[rx, ry]]
-      pl = movePointsLeft - @tileMap.costAt rx, ry
-      @populateMap m, rx, ry, pl, visited
-
+    costAt = (pt) => @tileMap.costAt pt[0], pt[1]
+    neighborsFn = (pt) =>
+      [pt[0] + dx, pt[1] + dy] for [dx, dy] in [[0, -1], [0, 1], [-1, 0], [1, 0]]
+    bfs @canMove, [@tx, @ty], @movePoints, costAt, neighborsFn, {}
 
   draw: (ctx) ->
     ctx.fillStyle = 'rgba(30, 30, 30, 0.30)'
