@@ -119,12 +119,13 @@ class Entity
   tick: ->
   draw: (ctx) ->
 
-class YesNoOption extends Entity
+class OptionSelector extends Entity
   MAX_OFFSET = 30
   OFFSET_PPS = FPS / 5
   SLIDE_DURATION = 5
 
-  constructor: ->
+  # @options is an array of choices, in the order left, right, up, down
+  constructor: (@options) ->
     super()
     @x = (320/2 - 16) / 2
     @y = 240 - 16
@@ -134,25 +135,23 @@ class YesNoOption extends Entity
       @slideIn = null
     @slideOut = null
     @addSubTicker @slideIn
-    @currentChoice = 'yes'
+    @currentChoice = if @options.length > 2 then @options[3] else @options[0]
     @done = false
 
   isMoving: -> @slideIn != null or @slideOut != null
-
-  yes: -> @currentChoice == 'yes'
-  no: -> @currentChoice == 'no'
 
   inputUpdated: (controller) ->
     return false if @isMoving()
     return true if @done
     if controller.left()
-      @currentChoice = 'yes'
-      console.log @currentChoice
+      @currentChoice = @options[0]
     if controller.right()
-      @currentChoice = 'no'
-      console.log @currentChoice
+      @currentChoice = @options[1]
+    if controller.up()
+      @currentChoice = @options[2]
+    if controller.down()
+      @currentChoice = @options[3]
     if controller.action()
-      throw 'hm' if @slideOut
       @slideOut = new PositionSlide @, {x:0, y:30}, SLIDE_DURATION, =>
         @slideOut = null
         @done = true
@@ -171,8 +170,11 @@ class YesNoOption extends Entity
 
   draw: (ctx) ->
     # left box
-    @drawBox 'green', @x - 16, @y, 16, 16, @currentChoice == 'yes'
-    @drawBox 'red', @x + 16, @y, 16, 16, @currentChoice != 'yes'
+    @drawBox 'green', @x - 16, @y, 16, 16, @currentChoice == @options[0]
+    @drawBox 'red', @x + 16, @y, 16, 16, @currentChoice == @options[1]
+    return unless @options.length > 2
+    @drawBox 'orange', @x, @y - 16, 16, 16, @currentChoice == @options[2]
+    @drawBox 'blue', @x, @y + 16, 16, 16, @currentChoice == @options[3]
 
 txInPx = (tx, ty) -> {x: tx * TILE_WIDTH, y: ty * TILE_HEIGHT}
 ptEquals = (p, q) -> p.x == q.x and p.y == q.y
@@ -340,11 +342,11 @@ class PieceMoveSession
     return false if @pieceMoving
     return true if @menuDone
     if controller.action()
-      @yesNoOption = new YesNoOption
-      fs.push @yesNoOption, =>
-        yno = @yesNoOption
-        @yesNoOption = null
-        if yno.no()  # not done with this move
+      @moveConfirm = new OptionSelector ['confirm', 'cancel']
+      fs.push @moveConfirm, =>
+        yno = @moveConfirm
+        @moveConfirm = null
+        if yno.currentChoice != 'confirm'  # not done with this move
           return
         @radius.kill()
         @menuDone = true
@@ -438,6 +440,8 @@ class Controller
     @keysDown[event.keyCode] = false
 
   action: -> @keysDown[VKEY_ENTER]
+  up: -> @dir() == 'up'
+  down: -> @dir() == 'down'
   left: -> @dir() == 'left'
   right: -> @dir() == 'right'
   dir: ->
