@@ -342,11 +342,9 @@ class PieceMoveSession
     return false if @pieceMoving
     return true if @menuDone
     if controller.action()
-      @moveConfirm = new OptionSelector ['confirm', 'cancel']
-      fs.push @moveConfirm, =>
-        yno = @moveConfirm
-        @moveConfirm = null
-        if yno.currentChoice != 'confirm'  # not done with this move
+      moveConfirm = new OptionSelector ['confirm', 'cancel']
+      fs.push moveConfirm, =>
+        if moveConfirm.currentChoice != 'confirm'  # not done with this move
           return
         @radius.kill()
         @menuDone = true
