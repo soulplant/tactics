@@ -291,9 +291,6 @@ class Cursor extends Entity
     if @isOverTargetPiece()
       @cb()
 
-class CostMap
-  costAt: (x, y) -> 1
-
 class Radius extends Entity
   MAX_MAP_WIDTH = 1024
   constructor: (@tx, @ty, @movePoints, @tileMap) ->
