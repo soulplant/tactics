@@ -339,7 +339,6 @@ class PieceMoveSession
     @menuDone = false
 
   inputUpdated: (controller) ->
-    return false if @pieceMoving
     return true if @menuDone
     if controller.action()
       moveConfirm = new OptionSelector ['confirm', 'cancel']
@@ -354,10 +353,13 @@ class PieceMoveSession
     @piece.setDirection controller.dir()
     {x:dx, y:dy} = delta
     if @radius.canMove[[@piece.tx + dx, @piece.ty + dy]]
-      @pieceMoving = true
+      fs.push new InputBlocker
       @piece.moveBy delta, =>
-        @pieceMoving = false
+        fs.pop()
     false
+
+class InputBlocker
+  inputUpdated: (controller) -> false
 
 isActionEvent = (event) ->
   switch event.keyCode
@@ -478,5 +480,3 @@ gameLoop = ->
 id = setInterval gameLoop, (1000/FPS)
 
 stop = -> clearInterval id
-
-clear()
