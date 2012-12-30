@@ -21,8 +21,11 @@ CURSOR = 2
 
 FPS = 60
 WALK_TICKS = (FPS / 6)
-MOVEMENT_RANGE = 3
+MOVEMENT_RANGE = 5
 CURSOR_MOVE_PX = 3
+
+PLAYER_TEAM = 1
+ENEMY_TEAM = 2
 
 c = document.createElement 'canvas'
 c.width = WIDTH
@@ -125,7 +128,7 @@ class OptionSelector extends Entity
   SLIDE_DURATION = 5
 
   # @options is an array of choices, in the order left, right, up, down
-  constructor: (@options) ->
+  constructor: (@options, defaultOption) ->
     super()
     @x = (320/2 - 16) / 2
     @y = 240 - 16
@@ -135,7 +138,7 @@ class OptionSelector extends Entity
       @slideIn = null
     @slideOut = null
     @addSubTicker @slideIn
-    @currentChoice = if @options.length > 2 then @options[3] else @options[0]
+    @currentChoice = defaultOption or (if @options.length > 2 then @options[3] else @options[0])
     @done = false
 
   isMoving: -> @slideIn != null or @slideOut != null
@@ -204,7 +207,7 @@ class PositionSlide
     @entity.y = @startPos.y + dy * ratio
 
 class GamePiece extends Entity
-  constructor: (@tx, @ty, @imgSet) ->
+  constructor: (@team, @tx, @ty, @imgSet) ->
     super()
     @selected = false
     @zIndex = PIECE
@@ -291,23 +294,49 @@ class Cursor extends Entity
     if @isOverTargetPiece()
       @cb()
 
-# breadth first search
-# found - map from reachable points to the depth left from that point
-# start - starting point of the search (in this case, a point of form [x, y])
-# depth - how deep to search
-# costFn - the cost of getting to each point
-# neighborsFn - generates the list of neighboring points
-# visited points set
-bfs = (found, start, depth, costFn, neighborsFn, visited) ->
-  return if depth <= 0
-  return if visited[start]
-  found[start] = depth
-  visited[start] = true
-  ns = neighborsFn start
-  for n in ns
-    continue if visited[n]
-    d = depth - costFn n
-    bfs found, n, d, costFn, neighborsFn, visited
+moveSearch = (tileMap, start, depth) ->
+  height = tileMap.height
+  width = tileMap.width
+  inBounds = (pt) -> (0 <= pt[0] < width) and (0 <= pt[1] < height)
+  output = []
+  for y in [0...height]
+    row = []
+    for x in [0...width]
+      row.push -1
+    output.push row
+  [x, y] = start
+  output[y][x] = depth
+
+  neighbors = (pt) ->
+    [x, y] = pt
+    [x + dx, y + dy] for [dx, dy] in [[0, -1], [0, 1], [-1, 0], [1, 0]] when inBounds [x + dx, y + dy]
+
+  getBestCostFromNeighbor = (pt) ->
+    candidates = []
+    for [nx, ny] in neighbors pt
+      candidates.push output[ny][nx]
+    max = -1
+    for candidate in candidates
+      max = Math.max candidate, max
+    max
+
+  q = []
+
+  visit = (pt, d) ->
+    return if d < 0
+    output[y][x] = d
+    for pt in neighbors pt
+      if (inBounds pt) and (output[pt[1]][pt[0]] == -1)
+        q.push pt
+
+  visit start, depth
+  until q.length == 0
+    [pt] = q.splice 0, 1
+    [x, y] = pt
+    n = getBestCostFromNeighbor pt
+    d = n - tileMap.costAt x, y
+    visit pt, d
+  output
 
 class Radius extends Entity
   MAX_MAP_WIDTH = 1024
@@ -318,13 +347,13 @@ class Radius extends Entity
     costAt = (pt) => @tileMap.costAt pt[0], pt[1]
     neighborsFn = (pt) =>
       [pt[0] + dx, pt[1] + dy] for [dx, dy] in [[0, -1], [0, 1], [-1, 0], [1, 0]]
-    bfs @canMove, [@tx, @ty], @movePoints, costAt, neighborsFn, {}
+    @canMove = moveSearch @tileMap, [@tx, @ty], @movePoints
 
   draw: (ctx) ->
     ctx.fillStyle = 'rgba(30, 30, 30, 0.30)'
-    for tx in [@tx-@movePoints..@tx+@movePoints]
-      for ty in [@ty-@movePoints..@ty+@movePoints]
-        if @canMove[[tx, ty]]
+    for tx in [0...@tileMap.width]
+      for ty in [0...@tileMap.height]
+        if @canMove[ty][tx] >= 0
           @fillTileAt tx, ty
 
   distanceTo: (tx, ty) ->
@@ -334,7 +363,7 @@ class Radius extends Entity
     ctx.fillRect tx * TILE_WIDTH, ty * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT
 
 class PieceMoveSession
-  constructor: (@piece, @radius) ->
+  constructor: (@piece, @radius, @pieces) ->
     @startTx = @piece.tx
     @startTy = @piece.ty
     @done = false
@@ -344,10 +373,11 @@ class PieceMoveSession
   inputUpdated: (controller) ->
     return true if @menuDone
     if controller.action()
-      moveConfirm = new OptionSelector ['confirm', 'cancel']
+      enemiesInRange = @getEnemiesInRange()
+      defaultOption = 'stay'  # if enemiesInRange.length > 0 then 'attack' else 'stay'
+      moveConfirm = new OptionSelector ['attack', 'item', 'magic', 'stay'], defaultOption
       fs.push moveConfirm, =>
-        if moveConfirm.currentChoice != 'confirm'  # not done with this move
-          return
+        return if moveConfirm.currentChoice != 'stay'  # not done with this move
         @radius.kill()
         @menuDone = true
 
@@ -355,11 +385,14 @@ class PieceMoveSession
     return unless delta
     @piece.setDirection controller.dir()
     {x:dx, y:dy} = delta
-    if @radius.canMove[[@piece.tx + dx, @piece.ty + dy]]
+    if @radius.canMove[@piece.ty + dy][@piece.tx + dx] >= 0
       fs.push new InputBlocker
       @piece.moveBy delta, =>
         fs.pop()
     false
+
+  getEnemiesInRange: ->
+    p for p in @pieces when p.team != @piece.team
 
 class InputBlocker
   inputUpdated: (controller) -> false
@@ -396,9 +429,9 @@ class TileMap
 
 class Game
   constructor: (@tileMap) ->
-    m = new GamePiece 1, 2, warriorImgs
-    m1 = new GamePiece 8, 2, warriorImgs
-    @team = [m, m1]
+    m = new GamePiece PLAYER_TEAM, 1, 2, warriorImgs
+    m1 = new GamePiece ENEMY_TEAM, 8, 2, warriorImgs
+    @team = [m, m1]  # TODO rename - this includes both teams
     @selectedIndex = 0
     @selected = @team[@selectedIndex]
     @selected.select()
@@ -427,7 +460,7 @@ class Game
       @cursor = null
 
       radius = new Radius piece.tx, piece.ty, MOVEMENT_RANGE, @tileMap
-      @movePiece = new PieceMoveSession piece, radius
+      @movePiece = new PieceMoveSession piece, radius, @team
       fs.push @movePiece, =>
         @movePiece = null
         @selectNext()
