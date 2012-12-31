@@ -38,11 +38,16 @@ loadImage = (fn) ->
   img.src = fn
   img
 
-warriorImgs = {}
-warriorImgs['left'] = loadImage 'gfx/fighter-l.png'
-warriorImgs['right'] = loadImage 'gfx/fighter-r.png'
-warriorImgs['up'] = loadImage 'gfx/fighter-u.png'
-warriorImgs['down'] = loadImage 'gfx/fighter-d.png'
+loadImageDirMap = (name) ->
+  imgs = {}
+  imgs['left'] = loadImage 'gfx/' + name + '-l.png'
+  imgs['right'] = loadImage 'gfx/' + name + '-r.png'
+  imgs['up'] = loadImage 'gfx/' + name + '-u.png'
+  imgs['down'] = loadImage 'gfx/' + name + '-d.png'
+  imgs
+
+fighterImgs = loadImageDirMap 'fighter'
+enemyFighterImgs = loadImageDirMap 'efighter'
 
 tileImgs = {}
 tileImgs['grass'] = loadImage 'gfx/grass.png'
@@ -485,9 +490,9 @@ class TileMap
 
 class Game
   constructor: (@tileMap) ->
-    m = new GamePiece PLAYER_TEAM, 1, 2, warriorImgs
-    m1 = new GamePiece ENEMY_TEAM, 8, 2, warriorImgs
-    m2 = new GamePiece ENEMY_TEAM, 8, 4, warriorImgs
+    m = new GamePiece PLAYER_TEAM, 1, 2, fighterImgs
+    m1 = new GamePiece ENEMY_TEAM, 8, 2, enemyFighterImgs
+    m2 = new GamePiece ENEMY_TEAM, 8, 4, enemyFighterImgs
     @team = [m, m1, m2]  # TODO rename - this includes both teams
     @selectedIndex = 0
     @selected = @team[@selectedIndex]
