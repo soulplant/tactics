@@ -8,6 +8,7 @@ VKEY_UP = 38
 VKEY_RIGHT = 39
 VKEY_DOWN = 40
 VKEY_ENTER = 13
+VKEY_SEMICOLON = 186
 
 VKEY_H = 72
 VKEY_J = 74
@@ -32,6 +33,12 @@ c.width = WIDTH
 c.height = HEIGHT
 document.body.appendChild c
 ctx = c.getContext '2d'
+
+cloneObject = (obj) ->
+  result = {}
+  for own k of obj
+    result[k] = obj[k]
+  result
 
 loadImage = (fn) ->
   img = new Image()
@@ -171,9 +178,11 @@ class OptionSelector extends Entity
       @currentChoice = @options[2]
     if controller.down()
       @currentChoice = @options[3]
-    if controller.action()
+    if controller.action() or controller.cancel()
+      tookAction = controller.action()
       slideOut = new PositionSlide @, {x:0, y:30}, SLIDE_DURATION, fs.block =>
         @done = true
+        @committed = tookAction
         @kill()
       @addSubTicker slideOut
     false
@@ -223,7 +232,8 @@ class PositionSlide
     @entity.y = @startPos.y + dy * ratio
 
 class GamePiece extends Entity
-  constructor: (@team, @tx, @ty, @imgSet) ->
+  constructor: (@team, @tx, @ty, stats, @imgSet) ->
+    @stats = cloneObject stats
     super()
     @selected = false
     @zIndex = PIECE
@@ -241,8 +251,6 @@ class GamePiece extends Entity
     @selected = false
     @radius = null
 
-  isMoving: -> @posSlide != null
-
   tick: ->
 
   draw: (ctx) ->
@@ -254,14 +262,18 @@ class GamePiece extends Entity
   setDirection: (@dir) ->
 
   moveBy: (delta, cb) ->
-    throw "already moving" if @isMoving()
     dpx = {x: delta.x * TILE_WIDTH, y: delta.y * TILE_HEIGHT}
-    @posSlide = new PositionSlide @, dpx, WALK_TICKS, =>
+    posSlide = new PositionSlide @, dpx, WALK_TICKS, =>
       @tx += delta.x
       @ty += delta.y
       cb()
-      @posSlide = null
-    @addSubTicker @posSlide
+    @addSubTicker posSlide
+
+  getEnemiesInRange: (pieces) ->
+    p for p in pieces when p.team != @team and @manhattanDistTx(p) <= @stats.range
+
+  manhattanDistTx: (p) ->
+    Math.abs(@tx - p.tx) + Math.abs(@ty - p.ty)
 
 signum = (x) ->
   if x < 0
@@ -374,6 +386,7 @@ class AttackSession
     @cursor = new Cursor @piece.x, @piece.y
     @zIndex = CURSOR
     @enemyI = 0
+    @action = null  # will be 'attack' or 'cancel' when done.
     @slide()
 
   slide: ->
@@ -385,11 +398,16 @@ class AttackSession
     return false if @sliding
     if controller.action()  # select the current target piece
       @cursor.kill()
+      @action = 'attack'
       return true
     if controller.left() or controller.up()
       @selectNext -1
     if controller.right() or controller.down()
       @selectNext +1
+    if controller.cancel()
+      @cursor.kill()
+      @action = 'cancel'
+      return true
 
   selectNext: (delta) ->
     @enemyI = (@enemyI + delta + @enemies.length) % @enemies.length
@@ -406,20 +424,21 @@ class PieceMoveSession
   inputUpdated: (controller) ->
     return true if @menuDone
     if controller.action()
-      enemiesInRange = @getEnemiesInRange()
+      enemiesInRange = @piece.getEnemiesInRange @pieces
       defaultOption = if enemiesInRange.length > 0 then 'attack' else 'stay'
       moveConfirm = new OptionSelector ['attack', 'item', 'magic', 'stay'], defaultOption
       fs.push moveConfirm, =>
+        return unless moveConfirm.committed
         switch moveConfirm.currentChoice
           when 'stay'
             @cleanUp()
           when 'attack'
             attackSession = new AttackSession @piece, enemiesInRange
             fs.push attackSession, =>
+              if attackSession.action == 'cancel'
+                return
               @cleanUp()
             return
-          else
-            @cleanUp()
 
     delta = controller.delta()
     return unless delta
@@ -432,9 +451,6 @@ class PieceMoveSession
   cleanUp: ->
     @radius.kill()
     @menuDone = true
-
-  getEnemiesInRange: ->
-    p for p in @pieces when p.team != @piece.team
 
 class InputBlocker
   inputUpdated: (controller) -> false
@@ -489,10 +505,24 @@ class TileMap
       [x + dx, y + dy]
 
 class Game
+  PLAYER_STATS =
+    hp: 30
+    mp: 0
+    attack: 3
+    defense: 2
+    range: 1
+
+  ENEMY_STATS =
+    hp: 12
+    mp: 0
+    attack: 2
+    defense: 1
+    range: 1
+
   constructor: (@tileMap) ->
-    m = new GamePiece PLAYER_TEAM, 1, 2, fighterImgs
-    m1 = new GamePiece ENEMY_TEAM, 8, 2, enemyFighterImgs
-    m2 = new GamePiece ENEMY_TEAM, 8, 4, enemyFighterImgs
+    m = new GamePiece PLAYER_TEAM, 1, 2, PLAYER_STATS, fighterImgs
+    m1 = new GamePiece ENEMY_TEAM, 8, 2, ENEMY_STATS, enemyFighterImgs
+    m2 = new GamePiece ENEMY_TEAM, 8, 4, ENEMY_STATS, enemyFighterImgs
     @pieces = [m, m1, m2]
     @selectedIndex = 0
     @selected = @pieces[@selectedIndex]
@@ -536,6 +566,8 @@ class Controller
     @keysDown[event.keyCode] = false
 
   action: -> @keysDown[VKEY_ENTER]
+  cancel: -> @keysDown[VKEY_SEMICOLON]
+
   up: -> @dir() == 'up'
   down: -> @dir() == 'down'
   left: -> @dir() == 'left'
