@@ -493,9 +493,9 @@ class Game
     m = new GamePiece PLAYER_TEAM, 1, 2, fighterImgs
     m1 = new GamePiece ENEMY_TEAM, 8, 2, enemyFighterImgs
     m2 = new GamePiece ENEMY_TEAM, 8, 4, enemyFighterImgs
-    @team = [m, m1, m2]  # TODO rename - this includes both teams
+    @pieces = [m, m1, m2]
     @selectedIndex = 0
-    @selected = @team[@selectedIndex]
+    @selected = @pieces[@selectedIndex]
     @selected.select()
     @movePiece = null
     fs.push @
@@ -504,14 +504,14 @@ class Game
   inputUpdated: (controller) ->
     return false
 
-  nextSelectedIndex: -> (@selectedIndex + 1) % @team.length
+  nextSelectedIndex: -> (@selectedIndex + 1) % @pieces.length
 
   selectNext: ->
     @selected.deselect()
     x = @selected.x
     y = @selected.y
     @selectedIndex = @nextSelectedIndex()
-    @selected = @team[@selectedIndex]
+    @selected = @pieces[@selectedIndex]
     @startTurn x, y, @selected
 
   startTurn: (x, y, piece) ->
@@ -522,7 +522,7 @@ class Game
       @cursor = null
 
       radius = new Radius piece.tx, piece.ty, MOVEMENT_RANGE, @tileMap
-      @movePiece = new PieceMoveSession piece, radius, @team
+      @movePiece = new PieceMoveSession piece, radius, @pieces
       fs.push @movePiece, =>
         @movePiece = null
         @selectNext()
