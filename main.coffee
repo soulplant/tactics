@@ -69,11 +69,17 @@ class KeyFocusStack
     @stack = []
 
   push: (entity, cb) ->
-    @stack.push {entity, cb}
+    @stack.push {entity, cb, inited:false}
 
   peek: ->
     throw "empty stack" if @stack.length == 0
     @stack[@stack.length - 1]
+
+  block: (cb) ->
+    @push new InputBlocker
+    =>
+      @pop()
+      cb?()
 
   pop: ->
     pair = @peek()
@@ -83,7 +89,13 @@ class KeyFocusStack
 
   inputUpdated: (controller) ->
     return if @stack.length == 0
-    if @peek().entity.inputUpdated controller
+    pair = @peek()
+    if !pair.inited
+      pair.entity.init?()
+      pair.inited = true
+      # init() might have push()ed, so we re-handle.
+      return @inputUpdated controller
+    if pair.entity.inputUpdated controller
       @pop()
 
 es = new EntitySet
@@ -134,17 +146,14 @@ class OptionSelector extends Entity
     @y = 240 - 16
     @offset = 0
     @zIndex = CURSOR
-    @slideIn = new PositionSlide @, {x:0, y:-30}, SLIDE_DURATION, =>
-      @slideIn = null
-    @slideOut = null
-    @addSubTicker @slideIn
     @currentChoice = defaultOption or (if @options.length > 2 then @options[3] else @options[0])
     @done = false
 
-  isMoving: -> @slideIn != null or @slideOut != null
+  init: ->
+    slideIn = new PositionSlide @, {x:0, y:-30}, SLIDE_DURATION, fs.block()
+    @addSubTicker slideIn
 
   inputUpdated: (controller) ->
-    return false if @isMoving()
     return true if @done
     if controller.left()
       @currentChoice = @options[0]
@@ -155,11 +164,10 @@ class OptionSelector extends Entity
     if controller.down()
       @currentChoice = @options[3]
     if controller.action()
-      @slideOut = new PositionSlide @, {x:0, y:30}, SLIDE_DURATION, =>
-        @slideOut = null
+      slideOut = new PositionSlide @, {x:0, y:30}, SLIDE_DURATION, fs.block =>
         @done = true
         @kill()
-      @addSubTicker @slideOut
+      @addSubTicker slideOut
     false
 
   tick: ->
@@ -270,7 +278,7 @@ class Cursor extends Entity
     ctx.strokeRect @x, @y, TILE_WIDTH, TILE_HEIGHT
 
   isOverTargetPiece: ->
-    return false unless @targetPiece
+    return true unless @targetPiece
     return @targetPiece.x == @x and @targetPiece.y == @y
 
   isMoving: ->
@@ -297,7 +305,6 @@ class Cursor extends Entity
 moveSearch = (tileMap, start, depth) ->
   height = tileMap.height
   width = tileMap.width
-  inBounds = (pt) -> (0 <= pt[0] < width) and (0 <= pt[1] < height)
   output = []
   for y in [0...height]
     row = []
@@ -309,7 +316,9 @@ moveSearch = (tileMap, start, depth) ->
 
   neighbors = (pt) ->
     [x, y] = pt
-    [x + dx, y + dy] for [dx, dy] in [[0, -1], [0, 1], [-1, 0], [1, 0]] when inBounds [x + dx, y + dy]
+    deltas = [[0, -1], [0, 1], [-1, 0], [1, 0]]
+    for [dx, dy] in deltas when tileMap.inBounds x + dx, y + dy
+      [x + dx, y + dy]
 
   getBestCostFromNeighbor = (pt) ->
     candidates = []
@@ -326,7 +335,7 @@ moveSearch = (tileMap, start, depth) ->
     return if d < 0
     output[y][x] = d
     for pt in neighbors pt
-      if (inBounds pt) and (output[pt[1]][pt[0]] == -1)
+      if (tileMap.inBounds pt[0], pt[1]) and (output[pt[1]][pt[0]] == -1)
         q.push pt
 
   visit start, depth
@@ -343,18 +352,20 @@ class Radius extends Entity
   constructor: (@tx, @ty, @movePoints, @tileMap) ->
     super()
     @zIndex = RADIUS
-    @canMove = {}
     costAt = (pt) => @tileMap.costAt pt[0], pt[1]
     neighborsFn = (pt) =>
       [pt[0] + dx, pt[1] + dy] for [dx, dy] in [[0, -1], [0, 1], [-1, 0], [1, 0]]
-    @canMove = moveSearch @tileMap, [@tx, @ty], @movePoints
+    @canMoveGrid = moveSearch @tileMap, [@tx, @ty], @movePoints
 
   draw: (ctx) ->
     ctx.fillStyle = 'rgba(30, 30, 30, 0.30)'
     for tx in [0...@tileMap.width]
       for ty in [0...@tileMap.height]
-        if @canMove[ty][tx] >= 0
+        if @canMoveGrid[ty][tx] >= 0
           @fillTileAt tx, ty
+
+  canMove: (x, y) ->
+    @tileMap.inBounds(x, y) and @canMoveGrid[y][x] >= 0
 
   distanceTo: (tx, ty) ->
     Math.abs(@tx - tx) + Math.abs(@ty - ty)
@@ -380,13 +391,13 @@ class AttackSession
     if controller.action()  # select the current target piece
       @cursor.kill()
       return true
-    if controller.left()
+    if controller.left() or controller.up()
       @selectNext -1
-    if controller.right()
+    if controller.right() or controller.down()
       @selectNext +1
 
   selectNext: (delta) ->
-    @enemyI = (@enemyI + delta) % @enemies.length
+    @enemyI = (@enemyI + delta + @enemies.length) % @enemies.length
     @slide()
 
 class PieceMoveSession
@@ -406,24 +417,21 @@ class PieceMoveSession
       fs.push moveConfirm, =>
         switch moveConfirm.currentChoice
           when 'stay'
-            return
+            @cleanUp()
           when 'attack'
             attackSession = new AttackSession @piece, enemiesInRange
             fs.push attackSession, =>
               @cleanUp()
             return
           else
-            return
-        @cleanUp()
+            @cleanUp()
 
     delta = controller.delta()
     return unless delta
     @piece.setDirection controller.dir()
     {x:dx, y:dy} = delta
-    if @radius.canMove[@piece.ty + dy][@piece.tx + dx] >= 0
-      fs.push new InputBlocker
-      @piece.moveBy delta, =>
-        fs.pop()
+    if @radius.canMove @piece.tx + dx, @piece.ty + dy
+      @piece.moveBy delta, fs.block()
     false
 
   cleanUp: ->
@@ -465,6 +473,9 @@ class TileMap
   costAt: (x, y) ->
     t = @costs[@tiles x, y]
     if t then t else 100
+
+  inBounds: (x, y) ->
+    0 <= x < @width and 0 <= y < @height
 
 class Game
   constructor: (@tileMap) ->
