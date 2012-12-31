@@ -148,6 +148,9 @@ class OptionSelector extends Entity
     @zIndex = CURSOR
     @currentChoice = defaultOption or (if @options.length > 2 then @options[3] else @options[0])
     @done = false
+    @images = {}
+    for option in @options
+      @images[option] = loadImage 'gfx/' + option + '-icon.png'
 
   init: ->
     slideIn = new PositionSlide @, {x:0, y:-30}, SLIDE_DURATION, fs.block()
@@ -172,20 +175,20 @@ class OptionSelector extends Entity
 
   tick: ->
 
-  drawBox: (style, x, y, w, h, border) ->
-    ctx.fillStyle = style
-    ctx.fillRect x, y, w, h
-    if border
+  drawBox: (option, x, y, w, h) ->
+    img = @images[option]
+    ctx.drawImage img, x, y
+    if option == @currentChoice
       ctx.strokeStyle = 'black'
       ctx.strokeRect x, y, w, h
 
   draw: (ctx) ->
     # left box
-    @drawBox 'green', @x - 16, @y, 16, 16, @currentChoice == @options[0]
-    @drawBox 'red', @x + 16, @y, 16, 16, @currentChoice == @options[1]
+    @drawBox @options[0], @x - 16, @y, 16, 16
+    @drawBox @options[1], @x + 16, @y, 16, 16
     return unless @options.length > 2
-    @drawBox 'orange', @x, @y - 16, 16, 16, @currentChoice == @options[2]
-    @drawBox 'blue', @x, @y + 16, 16, 16, @currentChoice == @options[3]
+    @drawBox @options[2], @x, @y - 16, 16, 16
+    @drawBox @options[3], @x, @y + 16, 16, 16
 
 txInPx = (tx, ty) -> {x: tx * TILE_WIDTH, y: ty * TILE_HEIGHT}
 ptEquals = (p, q) -> p.x == q.x and p.y == q.y
@@ -303,27 +306,13 @@ class Cursor extends Entity
       @cb()
 
 moveSearch = (tileMap, start, depth) ->
-  height = tileMap.height
-  width = tileMap.width
-  output = []
-  for y in [0...height]
-    row = []
-    for x in [0...width]
-      row.push -1
-    output.push row
-  [x, y] = start
-  output[y][x] = depth
-
-  neighbors = (pt) ->
-    [x, y] = pt
-    deltas = [[0, -1], [0, 1], [-1, 0], [1, 0]]
-    for [dx, dy] in deltas when tileMap.inBounds x + dx, y + dy
-      [x + dx, y + dy]
+  output = tileMap.makeGrid -1
+  output[start[1]][start[0]] = depth
 
   getBestCostFromNeighbor = (pt) ->
     candidates = []
-    for [nx, ny] in neighbors pt
-      candidates.push output[ny][nx]
+    for [x, y] in tileMap.neighbors pt
+      candidates.push output[y][x]
     max = -1
     for candidate in candidates
       max = Math.max candidate, max
@@ -332,9 +321,10 @@ moveSearch = (tileMap, start, depth) ->
   q = []
 
   visit = (pt, d) ->
+    [x, y] = pt
     return if d < 0
     output[y][x] = d
-    for pt in neighbors pt
+    for pt in tileMap.neighbors pt
       if (tileMap.inBounds pt[0], pt[1]) and (output[pt[1]][pt[0]] == -1)
         q.push pt
 
@@ -458,6 +448,7 @@ eventToDir = (event) ->
 class TileMap
   GRASS = 0
   DIRT = 1
+
   constructor: (@width, @height, @imgSet) ->
     @tiles = (x, y) -> if x < 5 then DIRT else GRASS
     @costs = [1, 2]
@@ -476,6 +467,21 @@ class TileMap
 
   inBounds: (x, y) ->
     0 <= x < @width and 0 <= y < @height
+
+  makeGrid: (val) ->
+    output = []
+    for y in [0...@height]
+      row = []
+      for x in [0...@width]
+        row.push -1
+      output.push row
+    output
+
+  neighbors: (pt) ->
+    [x, y] = pt
+    deltas = [[0, -1], [0, 1], [-1, 0], [1, 0]]
+    for [dx, dy] in deltas when @inBounds x + dx, y + dy
+      [x + dx, y + dy]
 
 class Game
   constructor: (@tileMap) ->
