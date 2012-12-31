@@ -362,6 +362,33 @@ class Radius extends Entity
   fillTileAt: (tx, ty) ->
     ctx.fillRect tx * TILE_WIDTH, ty * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT
 
+# Move the cursor between targets.
+class AttackSession
+  constructor: (@piece, @enemies) ->
+    @cursor = new Cursor @piece.x, @piece.y
+    @zIndex = CURSOR
+    @enemyI = 0
+    @slide()
+
+  slide: ->
+    @sliding = true
+    @cursor.slideOverPiece @enemies[@enemyI], =>
+      @sliding = false
+
+  inputUpdated: (controller) ->
+    return false if @sliding
+    if controller.action()  # select the current target piece
+      @cursor.kill()
+      return true
+    if controller.left()
+      @selectNext -1
+    if controller.right()
+      @selectNext +1
+
+  selectNext: (delta) ->
+    @enemyI = (@enemyI + delta) % @enemies.length
+    @slide()
+
 class PieceMoveSession
   constructor: (@piece, @radius, @pieces) ->
     @startTx = @piece.tx
@@ -374,12 +401,20 @@ class PieceMoveSession
     return true if @menuDone
     if controller.action()
       enemiesInRange = @getEnemiesInRange()
-      defaultOption = 'stay'  # if enemiesInRange.length > 0 then 'attack' else 'stay'
+      defaultOption = if enemiesInRange.length > 0 then 'attack' else 'stay'
       moveConfirm = new OptionSelector ['attack', 'item', 'magic', 'stay'], defaultOption
       fs.push moveConfirm, =>
-        return if moveConfirm.currentChoice != 'stay'  # not done with this move
-        @radius.kill()
-        @menuDone = true
+        switch moveConfirm.currentChoice
+          when 'stay'
+            return
+          when 'attack'
+            attackSession = new AttackSession @piece, enemiesInRange
+            fs.push attackSession, =>
+              @cleanUp()
+            return
+          else
+            return
+        @cleanUp()
 
     delta = controller.delta()
     return unless delta
@@ -390,6 +425,10 @@ class PieceMoveSession
       @piece.moveBy delta, =>
         fs.pop()
     false
+
+  cleanUp: ->
+    @radius.kill()
+    @menuDone = true
 
   getEnemiesInRange: ->
     p for p in @pieces when p.team != @piece.team
@@ -431,7 +470,8 @@ class Game
   constructor: (@tileMap) ->
     m = new GamePiece PLAYER_TEAM, 1, 2, warriorImgs
     m1 = new GamePiece ENEMY_TEAM, 8, 2, warriorImgs
-    @team = [m, m1]  # TODO rename - this includes both teams
+    m2 = new GamePiece ENEMY_TEAM, 8, 4, warriorImgs
+    @team = [m, m1, m2]  # TODO rename - this includes both teams
     @selectedIndex = 0
     @selected = @team[@selectedIndex]
     @selected.select()
