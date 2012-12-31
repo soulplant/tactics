@@ -522,9 +522,8 @@ class Game
       @cursor = null
 
       radius = new Radius piece.tx, piece.ty, MOVEMENT_RANGE, @tileMap
-      @movePiece = new PieceMoveSession piece, radius, @pieces
-      fs.push @movePiece, =>
-        @movePiece = null
+      movePiece = new PieceMoveSession piece, radius, @pieces
+      fs.push movePiece, =>
         @selectNext()
 
 class Controller
