@@ -496,7 +496,6 @@ class Game
     @pieces = [m, m1, m2]
     @selectedIndex = 0
     @selected = @pieces[@selectedIndex]
-    @selected.select()
     @movePiece = null
     fs.push @
     @startTurn 0, 0, m
