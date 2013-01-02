@@ -273,7 +273,6 @@ class GamePiece extends Entity
     super()
     @selected = false
     @zIndex = PIECE
-    @posSlide = null
     @dir = 'down'
     @x = @tx * TILE_WIDTH
     @y = @ty * TILE_HEIGHT
