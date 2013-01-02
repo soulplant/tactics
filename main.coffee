@@ -154,7 +154,7 @@ class OptionSelector extends Entity
   # @options is an array of choices, in the order left, right, up, down
   constructor: (@options, defaultOption) ->
     super()
-    @x = (320/2 - 16) / 2
+    @x = (320/2 - 16)
     @y = 240 - 16
     @offset = 0
     @zIndex = CURSOR
@@ -253,10 +253,12 @@ class GamePieceMenu extends Entity
     ctx.restore()
 
   draw: (ctx) ->
+    ctx.fillStyle = 'white'
+    ctx.fillRect @x, @y, @width, @height
     ctx.fillStyle = 'black'
     ctx.font = '9px volter'
     x = @x + 4
-    y = @y + 10
+    y = @y + 12
     ctx.fillText 'JAMES  Lvl 16', x, y
     y += 11
     @drawBar ctx, 18, 24, x + 16, y - 7, 90, 7
@@ -546,6 +548,8 @@ class TileMap
 
 class Game
   PLAYER_STATS =
+    hpMax: 30
+    mpMax: 0
     hp: 30
     mp: 0
     attack: 3
@@ -553,6 +557,8 @@ class Game
     range: 1
 
   ENEMY_STATS =
+    hpMax: 12
+    mpMax: 0
     hp: 12
     mp: 0
     attack: 2
@@ -624,7 +630,7 @@ class Controller
       when 'up' then {x:0, y:-1}
       when 'down' then {x:0, y:1}
 
-tm = new TileMap 10, 10, tileImgs
+tm = new TileMap 20, 20, tileImgs
 c = new Controller
 g = new Game tm
 
