@@ -231,6 +231,42 @@ class PositionSlide
     @entity.x = @startPos.x + dx * ratio
     @entity.y = @startPos.y + dy * ratio
 
+class GamePieceMenu extends Entity
+  constructor: (x, y, @piece) ->
+    super()
+    @x = x
+    @y = y
+    @width = 122
+    @height = 43
+    @zIndex = CURSOR
+
+  tick: ->
+
+  drawBar: (ctx, filled, max, x, y, width, height) ->
+    ctx.save()
+    ctx.fillStyle = 'red'
+    ctx.fillRect x, y, width, height
+    ctx.fillStyle = 'green'
+    ctx.fillRect x, y, (width * (filled / max)), height
+    ctx.strokeStyle = 'black'
+    ctx.strokeRect x - 0.5, y - 0.5, width, height
+    ctx.restore()
+
+  draw: (ctx) ->
+    ctx.fillStyle = 'black'
+    ctx.font = '9px volter'
+    x = @x + 4
+    y = @y + 10
+    ctx.fillText 'JAMES  Lvl 16', x, y
+    y += 11
+    @drawBar ctx, 18, 24, x + 16, y - 7, 90, 7
+    ctx.fillText 'HP', x, y
+    y += 11
+    @drawBar ctx, 5, 8, x + 16, y - 7, 90, 7
+    ctx.fillText 'MP', x, y
+    ctx.strokeStyle = 'black'
+    ctx.strokeRect @x - 0.5, @y - 0.5, @width, @height
+
 class GamePiece extends Entity
   constructor: (@team, @tx, @ty, stats, @imgSet) ->
     @stats = cloneObject stats
@@ -241,6 +277,7 @@ class GamePiece extends Entity
     @dir = 'down'
     @x = @tx * TILE_WIDTH
     @y = @ty * TILE_HEIGHT
+    @menu = new GamePieceMenu 10, 190, @ if @team == PLAYER_TEAM
 
   select: ->
     return if @selected
@@ -252,6 +289,10 @@ class GamePiece extends Entity
     @radius = null
 
   tick: ->
+
+  kill: ->
+    @menu.kill()
+    super()
 
   draw: (ctx) ->
     ctx.drawImage @imgSet[@dir], @x, @y
