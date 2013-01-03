@@ -303,6 +303,14 @@ class GamePiece extends Entity
 
   setDirection: (@dir) ->
 
+  face: (piece) ->
+    dir =
+      if @tx < piece.tx then 'right'
+      else if @tx > piece.tx then 'left'
+      else if @ty < piece.ty then 'down'
+      else if @ty > piece.ty then 'up'
+    @setDirection dir
+
   moveBy: (delta, cb) ->
     dpx = {x: delta.x * TILE_WIDTH, y: delta.y * TILE_HEIGHT}
     posSlide = new PositionSlide @, dpx, WALK_TICKS, =>
@@ -432,6 +440,7 @@ class AttackSession
     @slide()
 
   slide: ->
+    @piece.face @enemies[@enemyI]
     @sliding = true
     @cursor.slideOverPiece @enemies[@enemyI], =>
       @sliding = false
