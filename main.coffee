@@ -106,7 +106,8 @@ class KeyFocusStack
       pair.entity.init?()
       pair.inited = true
       # init() might have push()ed, so we re-handle.
-      return @inputUpdated controller
+      @inputUpdated controller
+      return
     if pair.entity.inputUpdated controller
       @pop()
 
@@ -211,8 +212,8 @@ ptEquals = (p, q) -> p.x == q.x and p.y == q.y
 ptAdd = (p, q) -> {x: p.x + q.x, y: p.y + q.y}
 ptDiff = (p, q) -> {x: p.x - q.x, y: p.y - q.y}
 
-class BackAndForthSlide
-  constructor: (@entity, @delta, @duration) ->
+class ShowThenHideSlider
+  constructor: (@entity, @delta, @duration, @hideCb) ->
     @negativeDelta = {x: -@delta.x, y: -@delta.y}
     @startPos = {x: @entity.x, y: @entity.y}
     @targetPos = {x: @entity.x + @delta.x, y: @entity.y + @delta.y}
@@ -221,35 +222,15 @@ class BackAndForthSlide
 
   tick: ->
 
-  invertSlider: ->
-    @slider.alive = false
-    @slider = @slider.inverse()
+  show: ->
+    throw "." if @slider
+    @slider = new PositionSlide @entity, @startPos, @targetPos, @duration
     @entity.addSubTicker @slider
 
-  slideOut: ->
-    switch @sliding
-      when 'in'
-        @invertSlider()
-      when 'out'
-        return
-      when 'none'
-        @slider = new PositionSlide @entity, @startPos, @targetPos, @duration, =>
-          @slider = null
-          @sliding = 'none'
-        @entity.addSubTicker @slider
-    @sliding = 'out'
-
-  slideIn: ->
-    switch @sliding
-      when 'in'
-        return
-      when 'out'
-        @invertSlider()
-      when 'none'
-        @slider = new PositionSlide @entity, @targetPos, @startPos, @duration, =>
-          @sliding = 'none'
-        @entity.addSubTicker @slider
-    @sliding = 'in'
+  hide: ->
+    @slider.alive = false  # ensure the slider doesn't tick any more
+    @slider = @slider.inverse @hideCb
+    @entity.addSubTicker @slider
 
 class PositionSlide
   constructor: (@entity, from, to, @duration, @cb) ->
@@ -263,8 +244,8 @@ class PositionSlide
     throw "huh" if r < 0
     r
 
-  inverse: ->
-    result = new PositionSlide @entity, @to, @from, @duration, @cb
+  inverse: (cb) ->
+    result = new PositionSlide @entity, @to, @from, @duration, cb
     result.elapsed = @ticksLeft()
     result
 
@@ -284,24 +265,28 @@ class PositionSlide
     @entity.y = @from.y + dy * ratio
 
 class GamePieceMenu extends Entity
-  SLIDE_DURATION = 15
-  constructor: (isOnLeft, @piece) ->
+  @width = 122
+  @height = 43
+  @id = 0
+  SLIDE_DURATION = 6
+
+  constructor: (x, @piece) ->
     super()
-    @width = 122
-    @height = 43
-    @x = if isOnLeft then 10 else SCREEN_WIDTH - 10
+    @id = GamePieceMenu.id++
+    @width = GamePieceMenu.width
+    @height = GamePieceMenu.height
+    @x = x
     @y = SCREEN_HEIGHT + 1  # start off the bottom of the screen
     @visible = false
     @zIndex = CURSOR
-    @slider = new BackAndForthSlide @, {x:0, y:-@height - 10}, SLIDE_DURATION
+    @slider = new ShowThenHideSlider @, {x:0, y:-@height - 10}, SLIDE_DURATION, =>
+      @kill()
+    @slider.show()
 
   tick: ->
 
-  show: ->
-    @slider.slideOut()
-
   hide: ->
-    @slider.slideIn()
+    @slider.hide()
 
   drawBar: (ctx, filled, max, x, y, width, height) ->
     ctx.save()
@@ -339,18 +324,18 @@ class GamePiece extends Entity
     @dir = 'down'
     @x = @tx * TILE_WIDTH
     @y = @ty * TILE_HEIGHT
-    @menu = new GamePieceMenu true, @
 
   select: ->
     return if @selected
     @selected = true
-    @menu?.show()
+    @menu = new GamePieceMenu 10, @
 
   deselect: ->
     @dir = 'down'
     @selected = false
     @radius = null
-    @menu?.hide()
+    @menu.hide()
+    @menu = null
 
   tick: ->
 
@@ -503,7 +488,9 @@ class AttackSession
     @slide()
 
   slide: ->
+    @targetMenu.hide() if @targetMenu
     @piece.face @enemies[@enemyI]
+    @targetMenu = new GamePieceMenu SCREEN_WIDTH - GamePieceMenu.width - 10, @enemies[@enemyI]
     @sliding = true
     @cursor.slideOverPiece @enemies[@enemyI], =>
       @sliding = false
@@ -511,6 +498,8 @@ class AttackSession
   inputUpdated: (controller) ->
     return false if @sliding
     if controller.action()  # select the current target piece
+      if @targetMenu
+        @targetMenu.hide()
       @cursor.kill()
       @action = 'attack'
       return true
@@ -524,7 +513,9 @@ class AttackSession
       return true
 
   selectNext: (delta) ->
-    @enemyI = (@enemyI + delta + @enemies.length) % @enemies.length
+    nextEnemyI = (@enemyI + delta + @enemies.length) % @enemies.length
+    return if nextEnemyI == @enemyI
+    @enemyI = nextEnemyI
     @slide()
 
 class PieceMoveSession
@@ -674,13 +665,20 @@ class Game
         @selectNext()
 
 class Controller
+  VKEY_COMMAND = 91
   constructor: ->
     @keysDown = {}
+    @ignoreAll = false
 
   handleKeyDown: (event) ->
+    # on mac chrome, keys pressed while command is down don't emit keyup
+    @ignoreAll = true if event.keyCode == VKEY_COMMAND
+    return if @ignoreAll
     @keysDown[event.keyCode] = true
 
   handleKeyUp: (event) ->
+    @ignoreAll = false if event.keyCode == VKEY_COMMAND
+    return if @ignoreAll
     @keysDown[event.keyCode] = false
 
   action: -> @keysDown[VKEY_ENTER]
