@@ -320,7 +320,7 @@ class GamePieceMenu extends Entity
     ctx.font = '9px volter'
     x = @x + 4
     y = @y + 12
-    ctx.fillText 'JAMES  Lvl 16', x, y
+    ctx.fillText @piece.name + '  Lvl 16', x, y
     y += 11
     @drawBar ctx, @piece.stats.hp, @piece.stats.hpMax, x + 16, y - 7, 90, 7
     ctx.fillText 'HP', x, y
@@ -331,7 +331,7 @@ class GamePieceMenu extends Entity
     ctx.strokeRect @x - 0.5, @y - 0.5, @width, @height
 
 class GamePiece extends Entity
-  constructor: (@team, @tx, @ty, stats, @imgSet) ->
+  constructor: (@name, @team, @tx, @ty, stats, @imgSet) ->
     @stats = cloneObject stats
     super()
     @selected = false
@@ -339,8 +339,7 @@ class GamePiece extends Entity
     @dir = 'down'
     @x = @tx * TILE_WIDTH
     @y = @ty * TILE_HEIGHT
-    if @team == PLAYER_TEAM
-      @menu = new GamePieceMenu true, @
+    @menu = new GamePieceMenu true, @
 
   select: ->
     return if @selected
@@ -639,9 +638,9 @@ class Game
     range: 1
 
   constructor: (@tileMap) ->
-    m = new GamePiece PLAYER_TEAM, 1, 2, PLAYER_STATS, fighterImgs
-    m1 = new GamePiece ENEMY_TEAM, 8, 2, ENEMY_STATS, enemyFighterImgs
-    m2 = new GamePiece ENEMY_TEAM, 8, 4, ENEMY_STATS, enemyFighterImgs
+    m = new GamePiece 'JAMES', PLAYER_TEAM, 1, 2, PLAYER_STATS, fighterImgs
+    m1 = new GamePiece 'RED SKELETON', ENEMY_TEAM, 8, 2, ENEMY_STATS, enemyFighterImgs
+    m2 = new GamePiece 'RED SKELETON', ENEMY_TEAM, 8, 4, ENEMY_STATS, enemyFighterImgs
     @pieces = [m, m1, m2]
     @selectedIndex = 0
     @selected = @pieces[@selectedIndex]
