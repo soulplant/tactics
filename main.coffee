@@ -1,7 +1,7 @@
-WIDTH = 320
-HEIGHT = 240
 TILE_WIDTH = 16
 TILE_HEIGHT = 16
+SCREEN_WIDTH = 320
+SCREEN_HEIGHT = 240
 
 VKEY_LEFT = 37
 VKEY_UP = 38
@@ -21,7 +21,7 @@ PIECE = 1
 CURSOR = 2
 
 FPS = 60
-WALK_TICKS = (FPS / 6)
+WALK_TICKS = (FPS/6)
 MOVEMENT_RANGE = 5
 CURSOR_MOVE_PX = 3
 
@@ -29,8 +29,8 @@ PLAYER_TEAM = 1
 ENEMY_TEAM = 2
 
 c = document.createElement 'canvas'
-c.width = WIDTH
-c.height = HEIGHT
+c.width = SCREEN_WIDTH
+c.height = SCREEN_HEIGHT
 document.body.appendChild c
 ctx = c.getContext '2d'
 
@@ -61,7 +61,7 @@ tileImgs['grass'] = loadImage 'gfx/grass.png'
 tileImgs['dirt'] = loadImage 'gfx/dirt.png'
 
 clear = ->
-  ctx.clearRect 0, 0, WIDTH, HEIGHT
+  ctx.clearRect 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT
 
 class EntitySet
   constructor: ->
@@ -140,7 +140,9 @@ class Entity
     @subTickers.push st
 
   baseTick: ->
-    @subTickers = (s for s in @subTickers when not s.tick())
+    # Cull dead sub tickers.
+    @subTickers = (s for s in @subTickers when s.alive)
+    s.tick() for s in @subTickers
     @tick()
 
   tick: ->
@@ -154,8 +156,8 @@ class OptionSelector extends Entity
   # @options is an array of choices, in the order left, right, up, down
   constructor: (@options, defaultOption) ->
     super()
-    @x = (320/2 - 16)
-    @y = 240 - 16
+    @x = (SCREEN_WIDTH/2 - 16)
+    @y = SCREEN_HEIGHT - 16
     @offset = 0
     @zIndex = CURSOR
     @currentChoice = defaultOption or (if @options.length > 2 then @options[3] else @options[0])
@@ -165,7 +167,7 @@ class OptionSelector extends Entity
       @images[option] = loadImage 'gfx/' + option + '-icon.png'
 
   init: ->
-    slideIn = new PositionSlide @, {x:0, y:-30}, SLIDE_DURATION, fs.block()
+    slideIn = new PositionSlide @, @, ptAdd(@, {x:0, y:-30}), SLIDE_DURATION, fs.block()
     @addSubTicker slideIn
 
   inputUpdated: (controller) ->
@@ -180,7 +182,7 @@ class OptionSelector extends Entity
       @currentChoice = @options[3]
     if controller.action() or controller.cancel()
       tookAction = controller.action()
-      slideOut = new PositionSlide @, {x:0, y:30}, SLIDE_DURATION, fs.block =>
+      slideOut = new PositionSlide @, @, ptAdd(@, {x:0, y:30}), SLIDE_DURATION, fs.block =>
         @done = true
         @committed = tookAction
         @kill()
@@ -206,41 +208,100 @@ class OptionSelector extends Entity
 
 txInPx = (tx, ty) -> {x: tx * TILE_WIDTH, y: ty * TILE_HEIGHT}
 ptEquals = (p, q) -> p.x == q.x and p.y == q.y
+ptAdd = (p, q) -> {x: p.x + q.x, y: p.y + q.y}
+ptDiff = (p, q) -> {x: p.x - q.x, y: p.y - q.y}
 
-class PositionSlide
-  constructor: (@entity, @delta, @duration, @cb) ->
+class BackAndForthSlide
+  constructor: (@entity, @delta, @duration) ->
+    @negativeDelta = {x: -@delta.x, y: -@delta.y}
     @startPos = {x: @entity.x, y: @entity.y}
     @targetPos = {x: @entity.x + @delta.x, y: @entity.y + @delta.y}
-    @elapsed = 0
-
-  atTargetPos: ->
-    ptEquals @targetPos, @entity
+    @sliding = 'none'  # ['none', 'out', 'in']
+    @slider = null
 
   tick: ->
-    if @atTargetPos()
-      @cb()
-      return true
+
+  invertSlider: ->
+    @slider.alive = false
+    @slider = @slider.inverse()
+    @entity.addSubTicker @slider
+
+  slideOut: ->
+    switch @sliding
+      when 'in'
+        @invertSlider()
+      when 'out'
+        return
+      when 'none'
+        @slider = new PositionSlide @entity, @startPos, @targetPos, @duration, =>
+          @slider = null
+          @sliding = 'none'
+        @entity.addSubTicker @slider
+    @sliding = 'out'
+
+  slideIn: ->
+    switch @sliding
+      when 'in'
+        return
+      when 'out'
+        @invertSlider()
+      when 'none'
+        @slider = new PositionSlide @entity, @targetPos, @startPos, @duration, =>
+          @sliding = 'none'
+        @entity.addSubTicker @slider
+    @sliding = 'in'
+
+class PositionSlide
+  constructor: (@entity, from, to, @duration, @cb) ->
+    @from = {x: from.x, y: from.y}
+    @to = {x: to.x, y: to.y}
+    @elapsed = 0
+    @alive = true
+
+  ticksLeft: ->
+    r = @duration - @elapsed
+    throw "huh" if r < 0
+    r
+
+  inverse: ->
+    result = new PositionSlide @entity, @to, @from, @duration, @cb
+    result.elapsed = @ticksLeft()
+    result
+
+  tick: ->
+    if @elapsed == @duration
+      @cb?()
+      @alive = false
+      return
     @elapsed++
     @interpolatePosition()
-    false
 
   interpolatePosition: ->
     ratio = @elapsed / @duration
-    dx = @targetPos.x - @startPos.x
-    dy = @targetPos.y - @startPos.y
-    @entity.x = @startPos.x + dx * ratio
-    @entity.y = @startPos.y + dy * ratio
+    dx = @to.x - @from.x
+    dy = @to.y - @from.y
+    @entity.x = @from.x + dx * ratio
+    @entity.y = @from.y + dy * ratio
 
 class GamePieceMenu extends Entity
-  constructor: (x, y, @piece) ->
+  SLIDE_DURATION = 15
+  constructor: (isOnLeft, @piece) ->
     super()
-    @x = x
-    @y = y
     @width = 122
     @height = 43
+    @x = if isOnLeft then 10 else SCREEN_WIDTH - 10
+    @y = SCREEN_HEIGHT + 1  # start off the bottom of the screen
+    @visible = false
     @zIndex = CURSOR
+    @slider = new BackAndForthSlide @, {x:0, y:-@height - 10}, SLIDE_DURATION
 
   tick: ->
+
+  show: ->
+    @slider.slideOut()
+
+  hide: ->
+    @slider.slideIn()
 
   drawBar: (ctx, filled, max, x, y, width, height) ->
     ctx.save()
@@ -261,10 +322,10 @@ class GamePieceMenu extends Entity
     y = @y + 12
     ctx.fillText 'JAMES  Lvl 16', x, y
     y += 11
-    @drawBar ctx, 18, 24, x + 16, y - 7, 90, 7
+    @drawBar ctx, @piece.stats.hp, @piece.stats.hpMax, x + 16, y - 7, 90, 7
     ctx.fillText 'HP', x, y
     y += 11
-    @drawBar ctx, 5, 8, x + 16, y - 7, 90, 7
+    @drawBar ctx, @piece.stats.mp, @piece.stats.mpMax, x + 16, y - 7, 90, 7
     ctx.fillText 'MP', x, y
     ctx.strokeStyle = 'black'
     ctx.strokeRect @x - 0.5, @y - 0.5, @width, @height
@@ -278,16 +339,19 @@ class GamePiece extends Entity
     @dir = 'down'
     @x = @tx * TILE_WIDTH
     @y = @ty * TILE_HEIGHT
-    @menu = new GamePieceMenu 10, 190, @ if @team == PLAYER_TEAM
+    if @team == PLAYER_TEAM
+      @menu = new GamePieceMenu true, @
 
   select: ->
     return if @selected
     @selected = true
+    @menu?.show()
 
   deselect: ->
     @dir = 'down'
     @selected = false
     @radius = null
+    @menu?.hide()
 
   tick: ->
 
@@ -313,7 +377,7 @@ class GamePiece extends Entity
 
   moveBy: (delta, cb) ->
     dpx = {x: delta.x * TILE_WIDTH, y: delta.y * TILE_HEIGHT}
-    posSlide = new PositionSlide @, dpx, WALK_TICKS, =>
+    posSlide = new PositionSlide @, @, ptAdd(@, dpx), WALK_TICKS, =>
       @tx += delta.x
       @ty += delta.y
       cb()
