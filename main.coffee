@@ -498,19 +498,19 @@ class AttackSession
   inputUpdated: (controller) ->
     return false if @sliding
     if controller.action()  # select the current target piece
-      if @targetMenu
-        @targetMenu.hide()
-      @cursor.kill()
-      @action = 'attack'
+      @yieldAction 'attack'
       return true
     if controller.left() or controller.up()
       @selectNext -1
     if controller.right() or controller.down()
       @selectNext +1
     if controller.cancel()
-      @cursor.kill()
-      @action = 'cancel'
+      @yieldAction 'cancel'
       return true
+
+  yieldAction: (@action) ->
+    @cursor.kill()
+    @targetMenu?.hide()
 
   selectNext: (delta) ->
     nextEnemyI = (@enemyI + delta + @enemies.length) % @enemies.length
