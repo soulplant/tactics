@@ -60,8 +60,14 @@ tileImgs = {}
 tileImgs['grass'] = loadImage 'gfx/grass.png'
 tileImgs['dirt'] = loadImage 'gfx/dirt.png'
 
+diceImgs = []
+diceImgs[i] = loadImage 'gfx/die-' + i + '.png' for i in [1..6]
+
 clear = ->
   ctx.clearRect 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT
+
+randInt = (n) ->
+  Math.floor(Math.random() * n)
 
 class EntitySet
   constructor: ->
@@ -481,22 +487,46 @@ class Radius extends Entity
   fillTileAt: (tx, ty) ->
     ctx.fillRect tx * TILE_WIDTH, ty * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT
 
+class Timer
+  constructor: (@duration) ->
+    @elapsed = 0
+    @alive = true
+
+  tick: ->
+    @elapsed++
+    @elapsed = Math.min @duration, @elapsed
+
+  kill: ->
+    super()
+
+  expired: ->
+    @elapsed == @duration
+
 class AttackSession extends Entity
   constructor: (@attacker, @defender) ->
     super()
     @zIndex = ZI_CURSOR
+    @attackerRoll = randInt(6) + 1
+    @timer = new Timer 30
+    @addSubTicker @timer
+
+  drawPiece: (ctx, piece, x, y, bgStyle) ->
+    ctx.fillStyle = bgStyle
+    ctx.fillRect x, y, 16, 16
+    piece.drawAt ctx, x, y
 
   draw: (ctx) ->
     padding = 50
-    width = SCREEN_WIDTH - 2*padding
-    height = SCREEN_HEIGHT - 2*padding
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'
+    width = SCREEN_WIDTH - 2 * padding
+    height = SCREEN_HEIGHT - 2 * padding
+    ctx.fillStyle = 'rgba(0, 0, 0, 1)'
     ctx.fillRect padding, padding, width, height
-    @attacker.drawAt ctx, padding + 20, padding + 20
-    @defender.drawAt ctx, width - 20, padding + 20
+    @drawPiece ctx, @attacker, padding + 20, padding + 20, 'white'
+    @drawPiece ctx, @defender, width - 20, padding + 20, 'white'
+    ctx.drawImage diceImgs[@attackerRoll], padding + 50, padding + 20
 
   inputUpdated: (controller) ->
-    false
+    return @timer.expired() and controller.action()
 
 # Move the cursor between targets.
 class EnemySelectSession
@@ -567,6 +597,7 @@ class PieceMoveSession
                 return
               attackSession = new AttackSession @piece, enemySelectSession.targetedEnemy()
               fs.push attackSession, =>
+                attackSession.kill()
                 @cleanUp()
             return
 
