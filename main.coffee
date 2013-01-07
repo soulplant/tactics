@@ -16,9 +16,9 @@ VKEY_K = 75
 VKEY_L = 76
 
 # z-index
-RADIUS = 0
-PIECE = 1
-CURSOR = 2
+ZI_RADIUS = 0
+ZI_PIECE = 1
+ZI_CURSOR = 2
 
 FPS = 60
 WALK_TICKS = (FPS/6)
@@ -160,7 +160,7 @@ class OptionSelector extends Entity
     @x = (SCREEN_WIDTH/2 - 16)
     @y = SCREEN_HEIGHT - 16
     @offset = 0
-    @zIndex = CURSOR
+    @zIndex = ZI_CURSOR
     @currentChoice = defaultOption or (if @options.length > 2 then @options[3] else @options[0])
     @done = false
     @images = {}
@@ -278,7 +278,7 @@ class GamePieceMenu extends Entity
     @x = x
     @y = SCREEN_HEIGHT + 1  # start off the bottom of the screen
     @visible = false
-    @zIndex = CURSOR
+    @zIndex = ZI_CURSOR
     @slider = new ShowThenHideSlider @, {x:0, y:-@height - 10}, SLIDE_DURATION, =>
       @kill()
     @slider.show()
@@ -320,7 +320,7 @@ class GamePiece extends Entity
     @stats = cloneObject stats
     super()
     @selected = false
-    @zIndex = PIECE
+    @zIndex = ZI_PIECE
     @dir = 'down'
     @x = @tx * TILE_WIDTH
     @y = @ty * TILE_HEIGHT
@@ -344,10 +344,13 @@ class GamePiece extends Entity
     super()
 
   draw: (ctx) ->
-    ctx.drawImage @imgSet[@dir], @x, @y
+    @drawAt ctx, @x, @y
+
+  drawAt: (ctx, x, y) ->
+    ctx.drawImage @imgSet[@dir], x, y
     if @selected
       ctx.strokeStyle = 'black'
-      ctx.strokeRect @x, @y, @width, @height
+      ctx.strokeRect x, y, @width, @height
 
   setDirection: (@dir) ->
 
@@ -389,7 +392,7 @@ class Cursor extends Entity
     super()
     @x = x
     @y = y
-    @zIndex = CURSOR
+    @zIndex = ZI_CURSOR
 
   draw: (ctx) ->
     ctx.strokeStyle = 'black'
@@ -456,7 +459,7 @@ class Radius extends Entity
   MAX_MAP_WIDTH = 1024
   constructor: (@tx, @ty, @movePoints, @tileMap) ->
     super()
-    @zIndex = RADIUS
+    @zIndex = ZI_RADIUS
     costAt = (pt) => @tileMap.costAt pt[0], pt[1]
     neighborsFn = (pt) =>
       [pt[0] + dx, pt[1] + dy] for [dx, dy] in [[0, -1], [0, 1], [-1, 0], [1, 0]]
@@ -478,17 +481,34 @@ class Radius extends Entity
   fillTileAt: (tx, ty) ->
     ctx.fillRect tx * TILE_WIDTH, ty * TILE_HEIGHT, TILE_WIDTH, TILE_HEIGHT
 
+class AttackSession extends Entity
+  constructor: (@attacker, @defender) ->
+    super()
+    @zIndex = ZI_CURSOR
+
+  draw: (ctx) ->
+    padding = 50
+    width = SCREEN_WIDTH - 2*padding
+    height = SCREEN_HEIGHT - 2*padding
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'
+    ctx.fillRect padding, padding, width, height
+    @attacker.drawAt ctx, padding + 20, padding + 20
+    @defender.drawAt ctx, width - 20, padding + 20
+
+  inputUpdated: (controller) ->
+    false
+
 # Move the cursor between targets.
-class AttackSession
+class EnemySelectSession
   constructor: (@piece, @enemies) ->
     @cursor = new Cursor @piece.x, @piece.y
-    @zIndex = CURSOR
+    @zIndex = ZI_CURSOR
     @enemyI = 0
     @action = null  # will be 'attack' or 'cancel' when done.
     @slide()
 
   slide: ->
-    @targetMenu.hide() if @targetMenu
+    @targetMenu?.hide()
     @piece.face @enemies[@enemyI]
     @targetMenu = new GamePieceMenu SCREEN_WIDTH - GamePieceMenu.width - 10, @enemies[@enemyI]
     @sliding = true
@@ -518,6 +538,9 @@ class AttackSession
     @enemyI = nextEnemyI
     @slide()
 
+  targetedEnemy: ->
+    @enemies[@enemyI]
+
 class PieceMoveSession
   constructor: (@piece, @radius, @pieces) ->
     @startTx = @piece.tx
@@ -538,11 +561,13 @@ class PieceMoveSession
           when 'stay'
             @cleanUp()
           when 'attack'
-            attackSession = new AttackSession @piece, enemiesInRange
-            fs.push attackSession, =>
-              if attackSession.action == 'cancel'
+            enemySelectSession = new EnemySelectSession @piece, enemiesInRange
+            fs.push enemySelectSession, =>
+              if enemySelectSession.action == 'cancel'
                 return
-              @cleanUp()
+              attackSession = new AttackSession @piece, enemySelectSession.targetedEnemy()
+              fs.push attackSession, =>
+                @cleanUp()
             return
 
     delta = controller.delta()
@@ -717,9 +742,9 @@ gameLoop = ->
   es.tick()
   fs.inputUpdated c
   tm.draw ctx
-  e.draw ctx for e in es.entities when e.zIndex == RADIUS
-  e.draw ctx for e in es.entities when e.zIndex == PIECE
-  e.draw ctx for e in es.entities when e.zIndex == CURSOR
+  e.draw ctx for e in es.entities when e.zIndex == ZI_RADIUS
+  e.draw ctx for e in es.entities when e.zIndex == ZI_PIECE
+  e.draw ctx for e in es.entities when e.zIndex == ZI_CURSOR
 
 id = setInterval gameLoop, (1000/FPS)
 
