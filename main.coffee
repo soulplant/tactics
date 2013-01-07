@@ -270,7 +270,7 @@ class PositionSlide
     @entity.x = @from.x + dx * ratio
     @entity.y = @from.y + dy * ratio
 
-class GamePieceMenu extends Entity
+class GamePieceStatsDialog extends Entity
   @width = 122
   @height = 43
   @id = 0
@@ -278,9 +278,9 @@ class GamePieceMenu extends Entity
 
   constructor: (x, @piece) ->
     super()
-    @id = GamePieceMenu.id++
-    @width = GamePieceMenu.width
-    @height = GamePieceMenu.height
+    @id = GamePieceStatsDialog.id++
+    @width = GamePieceStatsDialog.width
+    @height = GamePieceStatsDialog.height
     @x = x
     @y = SCREEN_HEIGHT + 1  # start off the bottom of the screen
     @visible = false
@@ -334,19 +334,19 @@ class GamePiece extends Entity
   select: ->
     return if @selected
     @selected = true
-    @menu = new GamePieceMenu 10, @
+    @dialog = new GamePieceStatsDialog 10, @
 
   deselect: ->
     @dir = 'down'
     @selected = false
     @radius = null
-    @menu.hide()
-    @menu = null
+    @dialog.hide()
+    @dialog = null
 
   tick: ->
 
   kill: ->
-    @menu.kill()
+    @dialog.kill()
     super()
 
   draw: (ctx) ->
@@ -510,6 +510,8 @@ class AttackSession extends Entity
     @timer = new Timer 30
     @addSubTicker @timer
 
+  tick: ->
+
   drawPiece: (ctx, piece, x, y, bgStyle) ->
     ctx.fillStyle = bgStyle
     ctx.fillRect x, y, 16, 16
@@ -540,7 +542,7 @@ class EnemySelectSession
   slide: ->
     @targetMenu?.hide()
     @piece.face @enemies[@enemyI]
-    @targetMenu = new GamePieceMenu SCREEN_WIDTH - GamePieceMenu.width - 10, @enemies[@enemyI]
+    @targetMenu = new GamePieceStatsDialog SCREEN_WIDTH - GamePieceStatsDialog.width - 10, @enemies[@enemyI]
     @sliding = true
     @cursor.slideOverPiece @enemies[@enemyI], =>
       @sliding = false
